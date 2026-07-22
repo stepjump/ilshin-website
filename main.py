@@ -3,15 +3,20 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# CORS 설정: Vercel 등 외부 프론트엔드에서의 접근 허용
+# CORS 허용 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 모든 도메인 허용 (필요시 특정 Vercel URL로 제한 가능)
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# 루트 경로 (/) 엔드포인트
 @app.get("/")
 def read_root():
-    return {"message": "Hello from FastAPI on Render!", "status": "online"}
+    return {
+        "title": "일신 웹사이트 API",
+        "status": "online",
+        "message": "FastAPI 백엔드가 정상적으로 연동되었습니다!"
+    }
