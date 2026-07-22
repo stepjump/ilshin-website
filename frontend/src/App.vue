@@ -1,33 +1,12 @@
 <template>
-  <div class="container">
-    <header v-if="company">
-      <h1>{{ company.name }}</h1>
-      <p class="slogan">{{ company.slogan }}</p>
-    </header>
-
-    <main v-if="company">
-      <section class="about">
-        <h2>회사 소개</h2>
-        <p>{{ company.about }}</p>
-      </section>
-
-      <section class="services">
-        <h2>주요 서비스</h2>
-        <div class="service-grid">
-          <div v-for="item in company.services" :key="item.id" class="card">
-            <h3>{{ item.title }}</h3>
-            <p>{{ item.desc }}</p>
-          </div>
-        </div>
-      </section>
-    </main>
-
-    <div v-else-if="loading" class="loading">
-      데이터를 불러오는 중입니다...
-    </div>
-
-    <div v-else-if="error" class="error">
-      {{ error }}
+  <div style="font-family: sans-serif; padding: 2rem; max-width: 800px; margin: 0 auto;">
+    <h1>일신 웹사이트</h1>
+    <hr />
+    <h2>백엔드 연결 상태</h2>
+    <p v-if="loading">백엔드 서버(Render)에서 데이터를 가져오는 중입니다...</p>
+    <p v-else-if="error" style="color: red;">연결 에러: {{ error }}</p>
+    <div v-else style="background: #f4f4f4; padding: 1rem; border-radius: 8px;">
+      <pre>{{ apiData }}</pre>
     </div>
   </div>
 </template>
@@ -35,18 +14,17 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 
-const company = ref(null)
+const apiData = ref(null)
 const loading = ref(true)
 const error = ref(null)
 
-// Render 백엔드 API 주소
-const API_URL = 'https://ilshin-website.onrender.com/api/company'
-
+// Render 백엔드 API 호출
 onMounted(async () => {
   try {
-    const response = await fetch(API_URL)
-    if (!response.ok) throw new Error('데이터를 불러오는데 실패했습니다.')
-    company.value = await response.json()
+    const response = await fetch('https://ilshin-website.onrender.com/')
+    if (!response.ok) throw new Error('네트워크 응답이 정상이 아닙니다.')
+    const data = await response.json()
+    apiData.value = data
   } catch (err) {
     error.value = err.message
   } finally {
@@ -54,41 +32,3 @@ onMounted(async () => {
   }
 })
 </script>
-
-<style scoped>
-.container {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 2rem;
-  font-family: sans-serif;
-}
-header {
-  text-align: center;
-  border-bottom: 2px solid #eee;
-  padding-bottom: 1.5rem;
-  margin-bottom: 2rem;
-}
-.slogan {
-  color: #666;
-  font-size: 1.1rem;
-}
-.service-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1.5rem;
-  margin-top: 1rem;
-}
-.card {
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 1.2rem;
-  background-color: #f9f9f9;
-}
-.loading, .error {
-  text-align: center;
-  padding: 3rem;
-}
-.error {
-  color: red;
-}
-</style>
