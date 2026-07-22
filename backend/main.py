@@ -2,8 +2,9 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI()
+app = FastAPI(title="일신 백엔드 API")
 
+# Vue 3 및 기타 프론트엔드 연동을 위한 CORS 허용
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -12,12 +13,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 1) 기본 루트 접속 확인용 (https://ilshin-backend.onrender.com 접속시)
+# 1) 기본 메인 주소 (https://ilshin-website.onrender.com/ 접속 시)
 @app.get("/")
 def read_root():
-    return {"status": "ok"}
+    return {"status": "online", "message": "일신 백엔드 API 서버가 작동 중입니다."}
 
-# 2) 일신 회사 정보 API (https://ilshin-backend.onrender.com/api/company 접속시)
+# 2) 일신 회사 정보 API (https://ilshin-website.onrender.com/api/company 접속 시)
 @app.get("/api/company")
 def get_company_info():
     return {
