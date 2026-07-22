@@ -4,7 +4,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# 모든 출처 허용 (배포 초기 테스트용)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,6 +12,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 1) 기본 루트 접속 확인용 (https://ilshin-backend.onrender.com 접속시)
+@app.get("/")
+def read_root():
+    return {"status": "ok"}
+
+# 2) 일신 회사 정보 API (https://ilshin-backend.onrender.com/api/company 접속시)
 @app.get("/api/company")
 def get_company_info():
     return {
@@ -25,4 +30,3 @@ def get_company_info():
             {"id": 3, "title": "컨설팅 서비스", "desc": "디지털 전환을 위한 전문 컨설팅 제공"}
         ]
     }
-
