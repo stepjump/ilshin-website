@@ -1,40 +1,42 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+import os
+from fastapi import FastAPI, Depends, HTTPException
+from sqlalchemy import create_engine, Column, Integer, String, Text
+from sqlalchemy.orm import declarative_base, sessionmaker, Session
 
 app = FastAPI()
 
-# CORS 설정 (Vercel 프론트엔드 연동 허용)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# 1. Neon DB 연결 URL 설정 (Render 환경변수 DATABASE_URL 읽기)
+# postgres:// 로 시작하면 SQLAlchemy 호환을 위해 postgresql:// 로 자동 변환
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# 기본 주소 접속 테스트
-@app.get("/")
-def read_root():
-    return {
-        "status": "online",
-        "message": "일신 백엔드 API 서버가 성공적으로 작동 중입니다!"
-    }
+# 2. SQLAlchemy 엔진 및 세션 생성
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
 
+# 3. Company DB 모델 정의
+class Company(Base):
+    __tablename__ = "companies"
 
-# 회사 정보 API
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    slogan = Column(String)
+    about = Column(Text)
+
+# 4. DB 세션 의존성 (Dependency) 함수
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# 5. /api/company 엔드포인트 (db: Session = Depends(get_db) 필수!)
 @app.get("/api/company")
-# def get_company_info():
-#     return {
-#         "name": "(주)일신",
-#         "slogan": "신뢰와 기술로 미래를 열어가는 기업",
-#         "about": "일신은 최고 품질의 서비스와 차별화된 기술력으로 고객 가치를 창출합니다.",
-#         "services": [
-#             {"id": 1, "title": "시스템 통합(SI)", "desc": "고객 맞춤형 IT 인프라 및 시스템 구축"},
-#             {"id": 2, "title": "소프트웨어 개발", "desc": "웹, 모바일, AI 솔루션 전문 개발"},
-#             {"id": 3, "title": "컨설팅 서비스", "desc": "디지털 전환을 위한 전문 컨설팅 제공"}
-#         ]
-#     }
-def get_company():
-    # DB에서 데이터를 SELECT 해서 가져와야 함
+def get_company(db: Session = Depends(get_db)):
     company_data = db.query(Company).first()
+    if not company_data:
+        raise HTTPException(status_code=404, detail="Company information not found")
     return company_data
