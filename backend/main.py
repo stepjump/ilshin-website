@@ -9,6 +9,23 @@ app = FastAPI(
     version="1.0.0"
 )
 
+app = FastAPI()
+
+origins = [
+    "https://ilshin-website-theta.vercel.app",  # Vercel 배포 주소 추가
+    "http://localhost:3000",                   # 로컬 테스트용
+    "*"                                        # (테스트용) 모든 도메인 허용
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 # 1. Neon DB 연결 URL 설정 (Render 환경변수 DATABASE_URL 읽기)
 # postgres:// 로 시작하면 SQLAlchemy 호환을 위해 postgresql:// 로 자동 변환
 DATABASE_URL = os.getenv("DATABASE_URL", "")
