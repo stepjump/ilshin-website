@@ -18,7 +18,7 @@ Base = declarative_base()
 
 # 3. Company DB 모델 정의
 class Company(Base):
-    __tablename__ = "companies"
+    __tablename__ = "company_info"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
