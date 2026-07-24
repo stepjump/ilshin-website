@@ -1,0 +1,7 @@
+# GitHub 배포
+git add .
+git commit -m "로컬에서 기능 수정"
+git push origin main
+
+# 로컬 서버 실행 (내 컴퓨터에서 테스트)
+uvicorn backend.main:app --reload
