@@ -167,3 +167,12 @@ def delete_company_info(company_id: int, db: Session = Depends(get_db)):
     db.delete(db_company)
     db.commit()
     return {"message": f"Company ID {company_id} has been deleted successfully"}
+
+
+
+
+# 1. member 라우터 모듈 불러오기
+import member
+
+# 2. member 라우터 등록
+app.include_router(member.router)

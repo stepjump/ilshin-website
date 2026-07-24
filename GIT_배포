@@ -1,3 +1,3 @@
 git add .
-git commit -m "15:04"
+git commit -m "member.py 추가 16:52"
 git push origin main
