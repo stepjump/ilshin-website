@@ -9,7 +9,6 @@ from pydantic import BaseModel, EmailStr
 # (파일 구조에 따라 import 경로를 맞춰주세요)
 from main import Base, get_db
 
-
 # ==========================================
 # 1. DB 모델 정의 (member 테이블 매핑)
 # ==========================================
