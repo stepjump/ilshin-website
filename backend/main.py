@@ -173,6 +173,10 @@ def delete_company_info(company_id: int, db: Session = Depends(get_db)):
 
 # 1. member 라우터 모듈 불러오기
 import member
-
 # 2. member 라우터 등록
 app.include_router(member.router)
+
+
+import door_info  # 1. door_info 모듈 불러오기
+# 2. 메인 애플리케이션에 라우터 등록
+app.include_router(door_info.router)
