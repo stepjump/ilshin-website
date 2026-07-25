@@ -21,7 +21,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 토큰 유효기간 (24시간)
 
 # OAuth2 패스워드 폼 설정 (Swagger 상단 Authorize 버튼과 연동)
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/members/login", auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
 
 
 # ==========================================
