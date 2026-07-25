@@ -1,28 +1,13 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
-import jwt  # PyJWT 패키지 (pip install pyjwt 필요)
 
-# ----------------------------------------------------
-# 0. 경로 예외 처리를 통한 임포트 (Import Error 방지)
-# ----------------------------------------------------
-try:
-    from .main import Base, get_db
-except ImportError:
-    from main import Base, get_db
-
-# JWT 인증 환경설정
-SECRET_KEY = "ilshin_website_secret_key_change_me"  # 보안용 비밀키
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 토큰 유효기간 (24시간)
-
-# OAuth2 패스워드 폼 설정 (Swagger 상단 Authorize 버튼과 연동)
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/members/login", auto_error=False)
-
+# main.py에서 생성한 Base, get_db를 가져옵니다.
+# (파일 구조에 따라 import 경로를 맞춰주세요)
+from main import Base, get_db
 
 # ==========================================
 # 1. DB 모델 정의 (member 테이블 매핑)
@@ -56,7 +41,7 @@ class MemberCreate(MemberBase):
     password: str
 
 
-# U (Update) - 회원정보 수정용
+# U (Update) - 회원정보 수정용 (선택적 변경)
 class MemberUpdate(BaseModel):
     email: Optional[EmailStr] = None
     password: Optional[str] = None
@@ -75,84 +60,18 @@ class MemberResponse(MemberBase):
         from_attributes = True
 
 
-# Token Response - 로그인 토큰 응답용
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    email: str
-    name: str
-    role: str
-
-
 # ==========================================
-# 3. Router 인스턴스 & 토큰 유틸리티
+# 3. Router 인스턴스 생성
 # ==========================================
 router = APIRouter(
     prefix="/api/members",
     tags=["Member Management"]
 )
 
-# JWT 액세스 토큰 생성 함수
-def create_access_token(data: dict):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-
-# 현재 로그인한 사용자 정보 추출 (다른 모듈에서 의존성 주입용으로 사용)
-def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> Optional[Member]:
-    if not token:
-        return None
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
-            return None
-    except Exception:
-        return None
-
-    user = db.query(Member).filter(Member.email == email).first()
-    return user
-
 
 # ==========================================
-# 4. 로그인 및 CRUD API 엔드포인트
+# 4. CRUD API 엔드포인트
 # ==========================================
-
-# [Auth] 로그인 및 JWT 토큰 발급
-@router.post("/login", response_model=TokenResponse)
-def login_for_access_token(
-    form_data: OAuth2PasswordRequestForm = Depends(), 
-    db: Session = Depends(get_db)
-):
-    # Swagger Authorize 폼에서는 username 필드에 email이 전달됩니다.
-    user = db.query(Member).filter(Member.email == form_data.username).first()
-    
-    if not user or user.password != form_data.password:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="이메일 또는 비밀번호가 올바르지 않습니다.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="비활성화된 계정입니다."
-        )
-
-    # 토큰 발급 (email을 sub 값으로 저장)
-    access_token = create_access_token(data={"sub": user.email})
-
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "email": user.email,
-        "name": user.name,
-        "role": user.role
-    }
-
 
 # [R - Read All] 전체 회원 목록 조회
 @router.get("", response_model=List[MemberResponse])
@@ -173,9 +92,10 @@ def get_member_by_id(member_id: int, db: Session = Depends(get_db)):
     return member
 
 
-# [C - Create] 신규 회원 등록 (회원가입)
+# [C - Create] 신규 회원 등록
 @router.post("", response_model=MemberResponse, status_code=status.HTTP_201_CREATED)
 def create_member(member: MemberCreate, db: Session = Depends(get_db)):
+    # 이메일 중복 체크
     existing_member = db.query(Member).filter(Member.email == member.email).first()
     if existing_member:
         raise HTTPException(
@@ -200,6 +120,7 @@ def update_member(member_id: int, member_data: MemberUpdate, db: Session = Depen
             detail="Member not found"
         )
 
+    # 이메일을 수정하려 할 때 다른 회원과 중복 여부 확인
     if member_data.email and member_data.email != db_member.email:
         email_check = db.query(Member).filter(Member.email == member_data.email).first()
         if email_check:
