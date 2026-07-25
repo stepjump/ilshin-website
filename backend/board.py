@@ -1,7 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import Session, relationship
 from pydantic import BaseModel
@@ -11,13 +10,10 @@ from pydantic import BaseModel
 # ----------------------------------------------------
 try:
     from .main import Base, get_db
-    from .member import Member
+    from .member import Member, get_current_user  # 👈 member.py의 인증 함수 및 모델 직접 사용
 except ImportError:
     from main import Base, get_db
-    from member import Member
-
-# 토큰 추출을 위한 OAuth2 설정 (비회원/회원 겸용 처리용)
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/login", auto_error=False)
+    from member import Member, get_current_user
 
 
 # ==========================================
@@ -81,29 +77,12 @@ class BoardResponse(BoardBase):
 
 
 # ==========================================
-# 3. Router 인스턴스 및 로그인 정보 헬퍼
+# 3. Router 인스턴스 생성
 # ==========================================
 router = APIRouter(
     prefix="/api/board",
     tags=["Multi-Board Management"]
 )
-
-# 로그인 상태(토큰) 확인 헬퍼 함수
-def get_current_user_optional(token: Optional[str] = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> Optional[Member]:
-    if not token:
-        return None
-    try:
-        # member.py 내에 토큰 검증 로직이 있거나, 간단히 DB 조회로 연결
-        # JWT 파싱 및 유저 조회 로직 구현 가능
-        import jwt
-        SECRET_KEY = "YOUR_SECRET_KEY"  # member.py의 SECRET_KEY와 동일하게 설정
-        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        email: str = payload.get("sub")
-        if email:
-            return db.query(Member).filter(Member.email == email).first()
-    except Exception:
-        return None
-    return None
 
 
 # ==========================================
@@ -135,7 +114,7 @@ def create_board(
     board_type: str, 
     board: BoardCreate, 
     db: Session = Depends(get_db),
-    current_user: Optional[Member] = Depends(get_current_user_optional)
+    current_user: Optional[Member] = Depends(get_current_user)  # 👈 member.py에서 가죠온 의존성 주입
 ):
     board_data = board.model_dump()
 
@@ -179,7 +158,7 @@ def update_board(
     board_id: int, 
     board_data: BoardUpdate, 
     db: Session = Depends(get_db),
-    current_user: Optional[Member] = Depends(get_current_user_optional)
+    current_user: Optional[Member] = Depends(get_current_user)  # 👈 member.py에서 가죠온 의존성 주입
 ):
     db_board = db.query(Board).filter(Board.board_type == board_type, Board.id == board_id).first()
     if not db_board:
@@ -215,7 +194,7 @@ def delete_board(
     board_id: int, 
     delete_req: BoardDeleteRequest, 
     db: Session = Depends(get_db),
-    current_user: Optional[Member] = Depends(get_current_user_optional)
+    current_user: Optional[Member] = Depends(get_current_user)  # 👈 member.py에서 가죠온 의존성 주입
 ):
     db_board = db.query(Board).filter(Board.board_type == board_type, Board.id == board_id).first()
     if not db_board:
@@ -237,4 +216,3 @@ def delete_board(
     db.delete(db_board)
     db.commit()
     return {"message": f"게시글(ID: {board_id})이 성공적으로 삭제되었습니다."}
-
