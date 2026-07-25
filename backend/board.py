@@ -34,7 +34,7 @@ class Board(Base):
 
     # member 테이블과의 외래키(FK) 및 관계 설정
     member_id = Column(Integer, ForeignKey("member.id", ondelete="SET NULL"), nullable=True)
-    author = Column(String(50), default="익명")
+    author = Column(String(50), default="손님")  # 기본 작성자 명칭: 손님
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Member 모델 매핑
@@ -47,21 +47,18 @@ class Board(Base):
 class BoardBase(BaseModel):
     title: str
     content: str
-    author: Optional[str] = "익명"
 
 
-# C (Create) - 작성 스키마
+# C (Create) - 작성 스키마 (member_id, author는 서버에서 자동 바인딩)
 class BoardCreate(BoardBase):
-    password: Optional[str] = None
-    member_id: Optional[int] = None
+    password: Optional[str] = None  # 비회원 작성 시 필수
 
 
 # U (Update) - 수정 스키마
 class BoardUpdate(BaseModel):
-    password: Optional[str] = None
     title: Optional[str] = None
     content: Optional[str] = None
-    author: Optional[str] = None
+    password: Optional[str] = None  # 비회원 글 수정시 비밀번호 검증용
 
 
 # D (Delete) - 삭제 요청 스키마
@@ -73,6 +70,7 @@ class BoardDeleteRequest(BaseModel):
 class BoardResponse(BoardBase):
     id: int
     board_type: str
+    author: str
     member_id: Optional[int] = None
     created_at: Optional[datetime] = None
 
@@ -104,7 +102,6 @@ def get_current_user_optional(
         email: str = payload.get("sub")
         if email:
             user = db.query(Member).filter(Member.email == email).first()
-            # is_active 가 'Y' 상태인 경우에만 인가 처리
             if user and getattr(user, "is_active", "Y") == "Y":
                 return user
     except Exception:
@@ -154,31 +151,21 @@ def create_board(
 ):
     board_data = board.model_dump()
 
-    # 1. 로그인 회원인 경우 (토큰 우선)
+    # 1. 로그인 회원인 경우 -> member_id 및 회원 이름 자동 설정
     if current_user:
         board_data["member_id"] = current_user.id
-        author_name = getattr(current_user, "name", None) or getattr(current_user, "email", "회원")
-        board_data["author"] = author_name
+        board_data["author"] = getattr(current_user, "name", None) or getattr(current_user, "email", "회원")
+        board_data["password"] = None  # 회원 글은 비밀번호 불필요
 
-    # 2. member_id 가 1 이상 전달된 경우 (0 이하 무시)
-    elif board.member_id and board.member_id > 0:
-        existing_member = db.query(Member).filter(Member.id == board.member_id).first()
-        if not existing_member:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="존재하지 않는 회원 ID(member_id)입니다."
-            )
-        author_name = getattr(existing_member, "name", None) or getattr(existing_member, "email", "회원")
-        board_data["author"] = author_name
-
-    # 3. 비회원 작성인 경우 (member_id가 None이거나 0인 경우)
+    # 2. 비회원인 경우 -> member_id는 None, author는 "손님"으로 자동 지정
     else:
-        board_data["member_id"] = None  # DB 0 전달로 인한 외래키 에러 차단
         if not board.password:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="비회원 게시글 작성 시 비밀번호 입력은 필수입니다."
             )
+        board_data["member_id"] = None
+        board_data["author"] = "손님"
 
     try:
         db_board = Board(
@@ -214,7 +201,7 @@ def update_board(
         )
 
     is_author = current_user and current_user.id == db_board.member_id
-    is_password_correct = board_data.password and db_board.password == board_data.password
+    is_password_correct = board_data.password and db_board.password == db_board.password
 
     if not (is_author or is_password_correct):
         raise HTTPException(
