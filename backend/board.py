@@ -11,10 +11,13 @@ from pydantic import BaseModel
 # ----------------------------------------------------
 try:
     from .main import Base, get_db
-    from .member import Member, get_current_user  # 👈 member.py의 인증 함수 직접 로드
+    from .member import Member, SECRET_KEY, ALGORITHM
 except ImportError:
     from main import Base, get_db
-    from member import Member, get_current_user
+    from member import Member, SECRET_KEY, ALGORITHM
+
+# 비회원 작성 허용을 위한 auto_error=False OAuth2 스킴
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/members/login", auto_error=False)
 
 
 # ==========================================
@@ -86,65 +89,24 @@ router = APIRouter(
 
 
 def get_current_user_optional(
-    db: Session = Depends(get_db),
-    current_user: Optional[Member] = Depends(lambda: None)  # 기본값 초기화
+    token: Optional[str] = Depends(oauth2_scheme_optional), 
+    db: Session = Depends(get_db)
 ) -> Optional[Member]:
     """
-    member.py의 get_current_user를 직접 활용하여 토큰이 정상적이면 유저를 반환하고,
-    인증 실패 시 401 오류를 던지는 대신 None을 반환하도록 예외를 안전하게 래핑합니다.
+    토큰이 있으면 유저 정보를 반환하고,
+    토큰이 없거나 유효하지 않으면 401 에러 대신 None을 반환하여 비회원도 접근 가능하게 합니다.
     """
-    return current_user
-
-
-# 선택적 토큰 검증용 wrapper 함수
-def get_optional_user(
-    db: Session = Depends(get_db),
-    user: Optional[Member] = Depends(lambda db=Depends(get_db): None)
-):
-    pass
-
-
-# 안전한 선택적 사용자 인증 헬퍼
-async def get_current_user_safe(
-    db: Session = Depends(get_db),
-    user_or_none: Optional[Member] = None
-) -> Optional[Member]:
-    return user_or_none
-
-
-# member.py의 get_current_user를 감싸서 401 예외를 예방하는 의존성 주입 함수
-async def get_optional_current_user(
-    db: Session = Depends(get_db),
-    user: Optional[Member] = Depends(
-        lambda: None
-    )
-) -> Optional[Member]:
+    if not token:
+        return None
     try:
-        # FastAPI 의존성 체인 내에서 get_current_user를 직접 호출 시도
-        from fastapi import Request
-        pass
+        from jose import jwt, JWTError
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email:
+            return db.query(Member).filter(Member.email == email).first()
     except Exception:
         return None
     return None
-
-# ==========================================
-# 실제 실무에서 가장 깔끔한 선택적 인증 패턴
-# ==========================================
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-security_optional = HTTPBearer(auto_error=False)
-
-def get_current_user_optional_clean(
-    auth: Optional[HTTPAuthorizationCredentials] = Depends(security_optional),
-    db: Session = Depends(get_db)
-) -> Optional[Member]:
-    if not auth or not auth.credentials:
-        return None
-    try:
-        # member.py의 인증 함수 검증 로직 재활용
-        return get_current_user(token=auth.credentials, db=db)
-    except HTTPException:
-        # 토큰 만료 등 인증 실패 시 401 대신 비회원(None)으로 유연하게 처리
-        return None
 
 
 # ==========================================
@@ -176,11 +138,11 @@ def create_board(
     board_type: str, 
     board: BoardCreate, 
     db: Session = Depends(get_db),
-    current_user: Optional[Member] = Depends(get_current_user_optional_clean)
+    current_user: Optional[Member] = Depends(get_current_user_optional)
 ):
     board_data = board.model_dump()
 
-    # 1. 로그인 회원인 경우 (JWT 토큰 검증 성공)
+    # 1. 로그인 회원인 경우
     if current_user:
         board_data["member_id"] = current_user.id
         board_data["author"] = current_user.name
@@ -227,7 +189,7 @@ def update_board(
     board_id: int, 
     board_data: BoardUpdate, 
     db: Session = Depends(get_db),
-    current_user: Optional[Member] = Depends(get_current_user_optional_clean)
+    current_user: Optional[Member] = Depends(get_current_user_optional)
 ):
     db_board = db.query(Board).filter(Board.board_type == board_type, Board.id == board_id).first()
     if not db_board:
@@ -261,7 +223,7 @@ def delete_board(
     board_id: int, 
     delete_req: BoardDeleteRequest, 
     db: Session = Depends(get_db),
-    current_user: Optional[Member] = Depends(get_current_user_optional_clean)
+    current_user: Optional[Member] = Depends(get_current_user_optional)
 ):
     db_board = db.query(Board).filter(Board.board_type == board_type, Board.id == board_id).first()
     if not db_board:
