@@ -2,10 +2,10 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
-import jwt  # PyJWT 패키지 (pip install pyjwt 필요)
+import jwt  # PyJWT 패키지
 
 # ----------------------------------------------------
 # 0. 경로 예외 처리를 통한 임포트 (Import Error 방지)
@@ -36,7 +36,9 @@ class Member(Base):
     name = Column(String(100), nullable=False)
     phone = Column(String(50), nullable=True)
     role = Column(String(20), default="user")
-    is_active = Column(Boolean, default=True)
+    
+    # 💥 Boolean 대신 VARCHAR(1)로 변경 ('Y' 또는 'N', 기본값 'Y')
+    is_active = Column(String(1), default="Y", nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -48,7 +50,7 @@ class MemberBase(BaseModel):
     name: str
     phone: Optional[str] = None
     role: Optional[str] = "user"
-    is_active: Optional[bool] = True
+    is_active: Optional[str] = "Y"  # 💥 bool -> str ('Y'/'N')
 
 
 # C (Create) - 회원가입/등록용
@@ -63,7 +65,7 @@ class MemberUpdate(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
     role: Optional[str] = None
-    is_active: Optional[bool] = None
+    is_active: Optional[str] = None  # 💥 bool -> str ('Y'/'N')
 
 
 # R (Response) - 회원정보 응답용 (비밀번호 제외)
@@ -100,7 +102,7 @@ def create_access_token(data: dict):
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-# 현재 로그인한 사용자 정보 추출 (다른 모듈에서 의존성 주입용으로 사용)
+# 현재 로그인한 사용자 정보 추출
 def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> Optional[Member]:
     if not token:
         return None
@@ -113,6 +115,11 @@ def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: Session 
         return None
 
     user = db.query(Member).filter(Member.email == email).first()
+    
+    # 💥 계정이 비활성화 상태('N')인 경우 None 처리
+    if user and user.is_active != "Y":
+        return None
+
     return user
 
 
@@ -126,7 +133,6 @@ def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(), 
     db: Session = Depends(get_db)
 ):
-    # Swagger Authorize 폼에서는 username 필드에 email이 전달됩니다.
     user = db.query(Member).filter(Member.email == form_data.username).first()
     
     if not user or user.password != form_data.password:
@@ -136,13 +142,13 @@ def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if not user.is_active:
+    # 💥 'Y' 가 아닌 경우 (즉, 'N' 등 비활성화 상태인 경우)
+    if user.is_active != "Y":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="비활성화된 계정입니다."
         )
 
-    # 토큰 발급 (email을 sub 값으로 저장)
     access_token = create_access_token(data={"sub": user.email})
 
     return {
