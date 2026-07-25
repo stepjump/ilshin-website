@@ -93,19 +93,31 @@ def get_current_user_optional(
     db: Session = Depends(get_db)
 ) -> Optional[Member]:
     """
-    토큰이 있으면 유저 정보를 반환하고,
-    토큰이 없거나 유효하지 않으면 401 에러 대신 None을 반환하여 비회원도 접근 가능하게 합니다.
+    토큰이 유효하면 유저 정보를 반환하고,
+    토큰이 없거나 유효하지 않으면 401 에러 대신 None을 반환하여 비회원 처리합니다.
     """
     if not token:
         return None
     try:
-        from jose import jwt, JWTError
+        import jwt  # PyJWT 사용시
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
         if email:
-            return db.query(Member).filter(Member.email == email).first()
+            user = db.query(Member).filter(Member.email == email).first()
+            # is_active 가 'Y' 상태인 경우에만 인가 처리
+            if user and getattr(user, "is_active", "Y") == "Y":
+                return user
     except Exception:
-        return None
+        try:
+            from jose import jwt as jose_jwt
+            payload = jose_jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            email: str = payload.get("sub")
+            if email:
+                user = db.query(Member).filter(Member.email == email).first()
+                if user and getattr(user, "is_active", "Y") == "Y":
+                    return user
+        except Exception:
+            return None
     return None
 
 
@@ -142,15 +154,14 @@ def create_board(
 ):
     board_data = board.model_dump()
 
-    # 1. 로그인 회원인 경우 (토큰 우선 - member_id 및 author 자동 채움)
+    # 1. 로그인 회원인 경우 (토큰 우선)
     if current_user:
         board_data["member_id"] = current_user.id
-        # Member 모델에 name 속성이 있으면 사용하고, 없으면 email 사용
         author_name = getattr(current_user, "name", None) or getattr(current_user, "email", "회원")
         board_data["author"] = author_name
-    
-    # 2. 토큰은 없으나 member_id를 직접 지정해 보낸 경우 (관리자/특수케이스용)
-    elif board.member_id:
+
+    # 2. member_id 가 1 이상 전달된 경우 (0 이하 무시)
+    elif board.member_id and board.member_id > 0:
         existing_member = db.query(Member).filter(Member.id == board.member_id).first()
         if not existing_member:
             raise HTTPException(
@@ -160,8 +171,9 @@ def create_board(
         author_name = getattr(existing_member, "name", None) or getattr(existing_member, "email", "회원")
         board_data["author"] = author_name
 
-    # 3. 비회원 작성인 경우 (비밀번호 검증)
+    # 3. 비회원 작성인 경우 (member_id가 None이거나 0인 경우)
     else:
+        board_data["member_id"] = None  # DB 0 전달로 인한 외래키 에러 차단
         if not board.password:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
