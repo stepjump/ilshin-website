@@ -7,6 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from pydantic import BaseModel
+from fastapi.security import OAuth2PasswordBearer
+
+
+# 1. 전역 OAuth2 설정 (Token URL을 /api/members/login 으로 명시)
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="/api/members/login",
+    auto_error=False
+)
 
 # .env 파일의 환경변수를 읽어옵니다.
 load_dotenv()
