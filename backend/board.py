@@ -142,12 +142,14 @@ def create_board(
 ):
     board_data = board.model_dump()
 
-    # 1. 로그인 회원인 경우
+    # 1. 로그인 회원인 경우 (토큰 우선 - member_id 및 author 자동 채움)
     if current_user:
         board_data["member_id"] = current_user.id
-        board_data["author"] = current_user.name
+        # Member 모델에 name 속성이 있으면 사용하고, 없으면 email 사용
+        author_name = getattr(current_user, "name", None) or getattr(current_user, "email", "회원")
+        board_data["author"] = author_name
     
-    # 2. member_id 명시 전달 시
+    # 2. 토큰은 없으나 member_id를 직접 지정해 보낸 경우 (관리자/특수케이스용)
     elif board.member_id:
         existing_member = db.query(Member).filter(Member.id == board.member_id).first()
         if not existing_member:
@@ -155,9 +157,10 @@ def create_board(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="존재하지 않는 회원 ID(member_id)입니다."
             )
-        board_data["author"] = existing_member.name
+        author_name = getattr(existing_member, "name", None) or getattr(existing_member, "email", "회원")
+        board_data["author"] = author_name
 
-    # 3. 비회원인 경우 비밀번호 필수
+    # 3. 비회원 작성인 경우 (비밀번호 검증)
     else:
         if not board.password:
             raise HTTPException(
