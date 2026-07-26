@@ -9,13 +9,12 @@ from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from pydantic import BaseModel
 from fastapi.security import OAuth2PasswordBearer
 
-# 1. OAuth2 패스워드 스킴 설정
+# OAuth2 설정
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="/api/members/login",
     auto_error=False
 )
 
-# .env 파일 환경변수 로드
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 
@@ -25,12 +24,12 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# 2. CORS 설정 (보안 강화: '*' 제거 및 실제 사용할 도메인 명시)
+# CORS 설정: 와일드카드 '*' 제거 및 실제 Vue/Vercel/로컬 주소 지정
 origins = [
     "https://ilshin-website-theta.vercel.app",
     "https://vercel.com",
     "http://localhost:3000",
-    "http://localhost:5173",  # Vue 3 (Vite 기본 포트)
+    "http://localhost:5173",  # Vite default
     "http://127.0.0.1:5173"
 ]
 
@@ -42,7 +41,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 3. Neon DB 연결 URL 설정 (postgresql:// 호환 변환)
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
@@ -51,7 +49,6 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
-# 4. 회사 정보 DB 모델
 class Company(Base):
     __tablename__ = "company_info"
 
@@ -67,7 +64,6 @@ class Company(Base):
 Base.metadata.create_all(bind=engine)
 
 
-# 5. Pydantic 검증 스키마
 class CompanyBase(BaseModel):
     name: str
     address: Optional[str] = None
@@ -93,7 +89,6 @@ class CompanyResponse(CompanyBase):
         from_attributes = True
 
 
-# 6. DB 세션 의존성
 def get_db():
     db = SessionLocal()
     try:
@@ -102,7 +97,6 @@ def get_db():
         db.close()
 
 
-# 7. 기본 메인 페이지
 @app.get("/")
 def read_root():
     return {
@@ -115,7 +109,6 @@ def read_root():
     }
 
 
-# 8. Company CRUD API
 @app.get("/api/company", response_model=List[CompanyResponse])
 def get_all_company_info(db: Session = Depends(get_db)):
     return db.query(Company).all()
@@ -164,7 +157,6 @@ def delete_company_info(company_id: int, db: Session = Depends(get_db)):
     return {"message": f"Company ID {company_id} has been deleted successfully"}
 
 
-# 9. 서브 라우터 등록
 try:
     from . import member, door_info, board
 except ImportError:

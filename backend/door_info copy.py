@@ -16,7 +16,6 @@ router = APIRouter(
 )
 
 
-# 1. DB 모델
 class DoorInfo(Base):
     __tablename__ = "door_info"
 
@@ -27,7 +26,6 @@ class DoorInfo(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
-# 2. Pydantic 스키마 (중복 제거)
 class DoorInfoBase(BaseModel):
     info: str
     ver: int
@@ -49,7 +47,6 @@ class DoorInfoResponse(DoorInfoBase):
         from_attributes = True
 
 
-# 3. CRUD API
 @router.post("/", response_model=DoorInfoResponse, status_code=status.HTTP_201_CREATED)
 def create_door_info(item: DoorInfoCreate, db: Session = Depends(get_db)):
     db_item = DoorInfo(**item.model_dump())

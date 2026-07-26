@@ -1,18 +1,21 @@
 from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import Session, relationship
 from pydantic import BaseModel
 
-# main.py 및 member.py에서 정의된 Base, get_db, Member 불러오기
-from main import Base, get_db
-from member import Member
+try:
+    from .main import Base, get_db
+    from .member import Member, SECRET_KEY, ALGORITHM, verify_password, get_password_hash
+except ImportError:
+    from main import Base, get_db
+    from member import Member, SECRET_KEY, ALGORITHM, verify_password, get_password_hash
+
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/members/login", auto_error=False)
 
 
-# ==========================================
-# 1. DB 모델 정의 (Member 연동 및 password 추가)
-# ==========================================
 class Board(Base):
     __tablename__ = "board"
 
@@ -20,133 +23,157 @@ class Board(Base):
     board_type = Column(String(50), nullable=False, default="free", index=True)
     title = Column(String(200), nullable=False)
     content = Column(Text, nullable=False)
-    password = Column(String(255), nullable=False)  # 게시글 수정/삭제용 비밀번호
-    
-    # member 테이블과의 외래키(FK) 설정
+    password = Column(String(255), nullable=True)  # 비회원용 해시 비밀번호
+
     member_id = Column(Integer, ForeignKey("member.id", ondelete="SET NULL"), nullable=True)
-    author = Column(String(50), default="익명")
+    author = Column(String(50), default="손님")
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    # Member 모델과의 관계(Relationship) 매핑
     member = relationship("Member", backref="boards")
 
 
-# ==========================================
-# 2. Pydantic 스키마 정의
-# ==========================================
 class BoardBase(BaseModel):
     title: str
     content: str
-    author: Optional[str] = "익명"
 
 
-# C (Create) - 작성 시 비밀번호 및 회원 ID 입력
 class BoardCreate(BoardBase):
-    password: str
-    member_id: Optional[int] = None  # 회원인 경우 member_id 전달 가능
+    password: Optional[str] = None
 
 
-# U (Update) - 수정 시 비밀번호 검증 필수
 class BoardUpdate(BaseModel):
-    password: str  # 본인 확인용 비밀번호
     title: Optional[str] = None
     content: Optional[str] = None
-    author: Optional[str] = None
+    password: Optional[str] = None
 
 
-# D (Delete) - 삭제 요청 데이터 (비밀번호 전송용)
 class BoardDeleteRequest(BaseModel):
-    password: str
+    password: Optional[str] = None
 
 
-# R (Response) - 게시글 응답용 (보안을 위해 password는 제외!)
 class BoardResponse(BoardBase):
     id: int
     board_type: str
+    author: str
     member_id: Optional[int] = None
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
-# ==========================================
-# 3. Router 인스턴스 생성
-# ==========================================
 router = APIRouter(
     prefix="/api/board",
     tags=["Multi-Board Management"]
 )
 
 
-# ==========================================
-# 4. CRUD API 엔드포인트
-# ==========================================
+def get_current_user_optional(
+    token: Optional[str] = Depends(oauth2_scheme_optional), 
+    db: Session = Depends(get_db)
+) -> Optional[Member]:
+    if not token:
+        return None
+    try:
+        import jwt
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email:
+            user = db.query(Member).filter(Member.email == email).first()
+            if user and getattr(user, "is_active", "Y") == "Y":
+                return user
+    except Exception:
+        return None
+    return None
 
-# [R - Read All] 특정 게시판 목록 조회
+
 @router.get("/{board_type}", response_model=List[BoardResponse])
 def get_boards_by_type(board_type: str, db: Session = Depends(get_db)):
-    boards = db.query(Board).filter(Board.board_type == board_type).order_by(Board.id.desc()).all()
-    return boards
+    return db.query(Board).filter(Board.board_type == board_type).order_by(Board.id.desc()).all()
 
 
-# [R - Read One] 특정 게시글 단건 조회
 @router.get("/{board_type}/{board_id}", response_model=BoardResponse)
 def get_board_by_id(board_type: str, board_id: int, db: Session = Depends(get_db)):
     board = db.query(Board).filter(Board.board_type == board_type, Board.id == board_id).first()
     if not board:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Board post not found"
+            detail="게시글을 찾을 수 없습니다."
         )
     return board
 
 
-# [C - Create] 게시글 작성 (비밀번호 설정 포함)
 @router.post("/{board_type}", response_model=BoardResponse, status_code=status.HTTP_201_CREATED)
-def create_board(board_type: str, board: BoardCreate, db: Session = Depends(get_db)):
-    # member_id가 넘어온 경우 해당 회원이 존재하는지 검증
-    if board.member_id:
-        existing_member = db.query(Member).filter(Member.id == board.member_id).first()
-        if not existing_member:
+def create_board(
+    board_type: str, 
+    board: BoardCreate, 
+    db: Session = Depends(get_db),
+    current_user: Optional[Member] = Depends(get_current_user_optional)
+):
+    board_data = board.model_dump()
+
+    if current_user:
+        board_data["member_id"] = current_user.id
+        board_data["author"] = getattr(current_user, "name", None) or getattr(current_user, "email", "회원")
+        board_data["password"] = None
+    else:
+        if not board.password:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid member_id. Member does not exist."
+                detail="비회원 게시글 작성 시 비밀번호 입력은 필수입니다."
             )
-        # 회원 이름이 있다면 작성자명(author) 자동 동기화 (원하는 경우)
-        if not board.author or board.author == "익명":
-            board.author = existing_member.name
+        board_data["member_id"] = None
+        board_data["author"] = "손님"
+        # 비회원 글 비밀번호 해싱
+        board_data["password"] = get_password_hash(board_data["password"])
 
-    db_board = Board(
-        board_type=board_type,
-        **board.model_dump()
-    )
-    db.add(db_board)
-    db.commit()
-    db.refresh(db_board)
-    return db_board
+    try:
+        db_board = Board(
+            board_type=board_type,
+            **board_data
+        )
+        db.add(db_board)
+        db.commit()
+        db.refresh(db_board)
+        return db_board
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"게시글 저장 중 오류 발생: {str(e)}"
+        )
 
 
-# [U - Update] 게시글 수정 (비밀번호 검증 필수)
 @router.put("/{board_type}/{board_id}", response_model=BoardResponse)
-def update_board(board_type: str, board_id: int, board_data: BoardUpdate, db: Session = Depends(get_db)):
+def update_board(
+    board_type: str, 
+    board_id: int, 
+    board_data: BoardUpdate, 
+    db: Session = Depends(get_db),
+    current_user: Optional[Member] = Depends(get_current_user_optional)
+):
     db_board = db.query(Board).filter(Board.board_type == board_type, Board.id == board_id).first()
     if not db_board:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Board post not found"
+            detail="게시글을 찾을 수 없습니다."
         )
 
-    # 비밀번호 일치 여부 확인
-    if db_board.password != board_data.password:
+    is_author = current_user and current_user.id == db_board.member_id
+    # 버그 수정: board_data.password와 db_board.password 해시값 검증
+    is_password_correct = (
+        board_data.password is not None 
+        and db_board.password is not None 
+        and verify_password(board_data.password, db_board.password)
+    )
+
+    if not (is_author or is_password_correct):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect password for this post"
+            detail="수정 권한이 없습니다. 비밀번호를 확인해 주세요."
         )
 
-    # 비밀번호 검증 성공 후 변경 데이터만 업데이트 (password 필드 제외)
-    update_data = board_data.model_dump(exclude_unset=True, exclude={"password"})
-    for key, value in update_data.items():
+    update_dict = board_data.model_dump(exclude_unset=True, exclude={"password"})
+    for key, value in update_dict.items():
         setattr(db_board, key, value)
 
     db.commit()
@@ -154,24 +181,35 @@ def update_board(board_type: str, board_id: int, board_data: BoardUpdate, db: Se
     return db_board
 
 
-# [D - Delete] 게시글 삭제 (HTTP POST/DELETE Body로 비밀번호 전송)
 @router.post("/{board_type}/{board_id}/delete", status_code=status.HTTP_200_OK)
-def delete_board(board_type: str, board_id: int, delete_req: BoardDeleteRequest, db: Session = Depends(get_db)):
+def delete_board(
+    board_type: str, 
+    board_id: int, 
+    delete_req: BoardDeleteRequest, 
+    db: Session = Depends(get_db),
+    current_user: Optional[Member] = Depends(get_current_user_optional)
+):
     db_board = db.query(Board).filter(Board.board_type == board_type, Board.id == board_id).first()
     if not db_board:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Board post not found"
+            detail="게시글을 찾을 수 없습니다."
         )
 
-    # 비밀번호 일치 여부 확인
-    if db_board.password != delete_req.password:
+    is_author = current_user and current_user.id == db_board.member_id
+    # 버그 수정: delete_req.password 해시 검증
+    is_password_correct = (
+        delete_req.password is not None 
+        and db_board.password is not None 
+        and verify_password(delete_req.password, db_board.password)
+    )
+
+    if not (is_author or is_password_correct):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect password for this post"
+            detail="삭제 권한이 없습니다. 비밀번호를 확인해 주세요."
         )
 
     db.delete(db_board)
     db.commit()
-    return {"message": f"Board ID {board_id} has been deleted successfully"}
-
+    return {"message": f"게시글(ID: {board_id})이 성공적으로 삭제되었습니다."}

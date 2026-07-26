@@ -14,28 +14,27 @@ try:
 except ImportError:
     from main import Base, get_db
 
-# 환경변수에서 Secret Key를 읽어오며, 없는 경우 기본값 사용
+# JWT 환경변수 지원 (없을 경우 덤미 키)
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "ilshin_website_secret_key_change_me")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24시간
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
-# 비밀번호 암호화(Bcrypt) 모듈 세팅
+# 비밀번호 암호화 컨텍스트
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/members/login", auto_error=False)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """입력받은 비밀번호와 DB의 해시 비밀번호 일치 여부 확인"""
+    """평문 비밀번호와 해시된 비밀번호 검증"""
     return pwd_context.verify(plain_password, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
-    """비밀번호 Bcrypt 암호화"""
+    """비밀번호 Bcrypt 해싱"""
     return pwd_context.hash(password)
 
 
-# 1. DB 모델 정의
 class Member(Base):
     __tablename__ = "member"
 
@@ -49,7 +48,6 @@ class Member(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
-# 2. Pydantic 스키마 정의
 class MemberBase(BaseModel):
     email: EmailStr
     name: str
@@ -87,7 +85,6 @@ class TokenResponse(BaseModel):
     role: str
 
 
-# 3. Router 인스턴스
 router = APIRouter(
     prefix="/api/members",
     tags=["Member Management"]
@@ -119,7 +116,6 @@ def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: Session 
     return user
 
 
-# 4. API 엔드포인트
 @router.post("/login", response_model=TokenResponse)
 def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(), 
@@ -127,7 +123,7 @@ def login_for_access_token(
 ):
     user = db.query(Member).filter(Member.email == form_data.username).first()
     
-    # 암호화 검증 (verify_password 사용)
+    # 비밀번호 검증 (해시 비교)
     if not user or not verify_password(form_data.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -175,7 +171,7 @@ def create_member(member: MemberCreate, db: Session = Depends(get_db)):
         )
 
     member_data = member.model_dump()
-    # 비밀번호 암호화 후 저장
+    # 비밀번호 해싱 후 저장
     member_data["password"] = get_password_hash(member_data["password"])
 
     db_member = Member(**member_data)
@@ -200,7 +196,6 @@ def update_member(member_id: int, member_data: MemberUpdate, db: Session = Depen
             )
 
     update_data = member_data.model_dump(exclude_unset=True)
-    # 수정할 때 비밀번호를 전달받으면 다시 암호화
     if "password" in update_data and update_data["password"]:
         update_data["password"] = get_password_hash(update_data["password"])
 
