@@ -19,7 +19,7 @@
           class="textarea-field"
         ></textarea>
         
-        <!-- 비회원 작성 시 작성자명/비밀번호 입력 -->
+        <!-- 비회원 작성 시에만 작성자명/비밀번호 입력 -->
         <div v-if="!isLoggedIn" class="guest-info">
           <input v-model="authorName" placeholder="작성자 이름" required />
           <input v-model="guestPassword" type="password" placeholder="비회원 비밀번호" required />
@@ -55,7 +55,8 @@ import { ref, onMounted } from 'vue';
 import { boardApi } from '../api/board';
 import { useAuth } from '../composables/useAuth';
 
-const { isLoggedIn } = useAuth();
+// currentUser 객체 함께 구조분해
+const { isLoggedIn, currentUser } = useAuth();
 
 const posts = ref([]);
 const loading = ref(true);
@@ -84,12 +85,19 @@ const fetchPosts = async () => {
 const handleCreate = async () => {
   submitting.value = true;
   try {
+    // 1. 로그인 상태면 member 테이블의 name(또는 user_name) 사용
+    // 2. 비회원 상태면 입력받은 authorName 사용
+    const finalAuthorName = isLoggedIn.value 
+      ? (currentUser.value?.name || currentUser.value?.user_name)
+      : authorName.value;
+
     const payload = {
       title: title.value,
       content: content.value,
-      author_name: authorName.value || undefined,
-      password: guestPassword.value || undefined
+      author_name: finalAuthorName || undefined,
+      password: isLoggedIn.value ? undefined : guestPassword.value
     };
+
     await boardApi.createBoard('free', payload);
     alert('게시글이 성공적으로 등록되었습니다.');
     
