@@ -40,8 +40,9 @@
         <h4>{{ post.title }}</h4>
         <p class="post-content">{{ post.content }}</p>
         <div class="meta">
-          <span>작성자: {{ post.author_name || '익명' }}</span>
-          <span> | {{ new Date(post.created_at).toLocaleDateString() }}</span>
+          <!-- author_name 또는 author 중 존재하는 값 표시 -->
+          <span>작성자: {{ post.author_name || post.author || '익명' }}</span>
+          <span> | {{ post.created_at ? new Date(post.created_at).toLocaleDateString() : '' }}</span>
         </div>
         <button @click="handleDelete(post.id)" class="del-btn">삭제</button>
       </li>
@@ -55,7 +56,6 @@ import { ref, onMounted } from 'vue';
 import { boardApi } from '../api/board';
 import { useAuth } from '../composables/useAuth';
 
-// currentUser 객체 함께 구조분해
 const { isLoggedIn, currentUser } = useAuth();
 
 const posts = ref([]);
@@ -85,16 +85,22 @@ const fetchPosts = async () => {
 const handleCreate = async () => {
   submitting.value = true;
   try {
-    // 1. 로그인 상태면 member 테이블의 name(또는 user_name) 사용
-    // 2. 비회원 상태면 입력받은 authorName 사용
-    const finalAuthorName = isLoggedIn.value 
-      ? (currentUser.value?.name || currentUser.value?.user_name)
-      : authorName.value;
+    let finalAuthorName = '';
+
+    if (isLoggedIn.value) {
+      const userObj = currentUser.value || currentUser || {};
+      finalAuthorName = userObj.name 
+                     || userObj.user_name 
+                     || userObj.username 
+                     || (userObj.email ? userObj.email.split('@')[0] : '회원');
+    } else {
+      finalAuthorName = authorName.value;
+    }
 
     const payload = {
       title: title.value,
       content: content.value,
-      author_name: finalAuthorName || undefined,
+      author_name: finalAuthorName || '익명',
       password: isLoggedIn.value ? undefined : guestPassword.value
     };
 
