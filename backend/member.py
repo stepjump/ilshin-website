@@ -7,227 +7,151 @@ from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 import jwt
-# from passlib.context import CryptContext
 import bcrypt
 
 
-
+# main.py에서 정의한 Base 및 get_db 의존성 불러오기
 try:
     from .main import Base, get_db
 except ImportError:
     from main import Base, get_db
 
-# 환경변수에서 Secret Key를 읽어오며, 없는 경우 기본값 사용
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "ilshin_website_secret_key_change_me")
+# JWT 설정
+SECRET_KEY = os.getenv("SECRET_KEY", "ilshin-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24시간
 
-# 비밀번호 암호화(Bcrypt) 모듈 세팅
-# pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/members/login", auto_error=False)
 
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """비밀번호 검증 (bcrypt 직접 사용)"""
-    try:
-        return bcrypt.checkpw(
-            plain_password.encode('utf-8'), 
-            hashed_password.encode('utf-8')
-        )
-    except Exception:
-        return False
-
-def get_password_hash(password: str) -> str:
-    """비밀번호 해싱 (bcrypt 직접 사용)"""
-    pwd_bytes = password.encode('utf-8')
-    salt = bcrypt.gensalt()
-    return bcrypt.hashpw(pwd_bytes, salt).decode('utf-8')
+router = APIRouter(
+    prefix="/api/members",
+    tags=["members"]
+)
 
 
-# 1. DB 모델 정의
+# 1. DB 모델 (member 테이블)
 class Member(Base):
     __tablename__ = "member"
 
     id = Column(Integer, primary_key=True, index=True)
-    email = Column(String(150), unique=True, nullable=False, index=True)
+    email = Column(String(100), unique=True, nullable=False, index=True)
     password = Column(String(255), nullable=False)
     name = Column(String(100), nullable=False)
-    phone = Column(String(50), nullable=True)
-    role = Column(String(20), default="user")
-    is_active = Column(String(1), default="Y", nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
-# 2. Pydantic 스키마 정의
-class MemberBase(BaseModel):
+# 2. Pydantic 스키마
+class MemberCreate(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+
+class MemberResponse(BaseModel):
+    id: int
     email: EmailStr
     name: str
-    phone: Optional[str] = None
-    role: Optional[str] = "user"
-    is_active: Optional[str] = "Y"
-
-
-class MemberCreate(MemberBase):
-    password: str
-
-
-class MemberUpdate(BaseModel):
-    email: Optional[EmailStr] = None
-    password: Optional[str] = None
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    role: Optional[str] = None
-    is_active: Optional[str] = None
-
-
-class MemberResponse(MemberBase):
-    id: int
     created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
 
-
-class TokenResponse(BaseModel):
+class Token(BaseModel):
     access_token: str
-    token_type: str = "bearer"
-    email: str
-    name: str
-    role: str
+    token_type: str
+    user: Optional[dict] = None
 
 
-# 3. Router 인스턴스
-router = APIRouter(
-    prefix="/api/members",
-    tags=["Member Management"]
-)
+# 3. 비밀번호 암호화 및 검증 함수
+def hash_password(password: str) -> str:
+    pwd_bytes = password.encode('utf-8')
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pwd_bytes, salt).decode('utf-8')
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
 
 
-def create_access_token(data: dict):
+# 4. JWT 토큰 생성 함수 (★ name 포함 처리 추가)
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-
-def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> Optional[Member]:
-    if not token:
-        return None
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
-            return None
-    except Exception:
-        return None
-
-    user = db.query(Member).filter(Member.email == email).first()
-    if user and user.is_active != "Y":
-        return None
-
-    return user
-
-
-# 4. API 엔드포인트
-@router.post("/login", response_model=TokenResponse)
-def login_for_access_token(
-    form_data: OAuth2PasswordRequestForm = Depends(), 
-    db: Session = Depends(get_db)
-):
-    user = db.query(Member).filter(Member.email == form_data.username).first()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     
-    # 암호화 검증 (verify_password 사용)
-    if not user or not verify_password(form_data.password, user.password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="이메일 또는 비밀번호가 올바르지 않습니다.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
 
-    if user.is_active != "Y":
+
+# 5. 회원가입 API
+@router.post("/register", response_model=MemberResponse, status_code=status.HTTP_201_CREATED)
+def register_member(member_in: MemberCreate, db: Session = Depends(get_db)):
+    existing_user = db.query(Member).filter(Member.email == member_in.email).first()
+    if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="비활성화된 계정입니다."
+            detail="이미 등록된 이메일입니다."
         )
-
-    access_token = create_access_token(data={"sub": user.email})
-
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "email": user.email,
-        "name": user.name,
-        "role": user.role
-    }
-
-
-@router.get("", response_model=List[MemberResponse])
-def get_all_members(db: Session = Depends(get_db)):
-    return db.query(Member).all()
-
-
-@router.get("/{member_id}", response_model=MemberResponse)
-def get_member_by_id(member_id: int, db: Session = Depends(get_db)):
-    member = db.query(Member).filter(Member.id == member_id).first()
-    if not member:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
-    return member
-
-
-@router.post("", response_model=MemberResponse, status_code=status.HTTP_201_CREATED)
-def create_member(member: MemberCreate, db: Session = Depends(get_db)):
-    existing_member = db.query(Member).filter(Member.email == member.email).first()
-    if existing_member:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="Email already registered"
-        )
-
-    member_data = member.model_dump()
-    # 비밀번호 암호화 후 저장
-    member_data["password"] = get_password_hash(member_data["password"])
-
-    db_member = Member(**member_data)
+    
+    hashed_pwd = hash_password(member_in.password)
+    db_member = Member(
+        email=member_in.email,
+        password=hashed_pwd,
+        name=member_in.name
+    )
     db.add(db_member)
     db.commit()
     db.refresh(db_member)
     return db_member
 
 
-@router.put("/{member_id}", response_model=MemberResponse)
-def update_member(member_id: int, member_data: MemberUpdate, db: Session = Depends(get_db)):
-    db_member = db.query(Member).filter(Member.id == member_id).first()
-    if not db_member:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+# 6. 로그인 API (OAuth2Form 및 JSON 입력 모두 지원)
+@router.post("/login", response_model=Token)
+def login_member(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = db.query(Member).filter(Member.email == form_data.username).first()
+    if not user or not verify_password(form_data.password, user.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="이메일 또는 비밀번호가 올바르지 않습니다.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # ★ JWT Token 페이로드에 member 테이블의 name 값을 명시적으로 포함
+    token_data = {
+        "sub": user.email,
+        "email": user.email,
+        "name": user.name
+    }
+    
+    access_token = create_access_token(data=token_data)
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "name": user.name
+        }
+    }
 
-    if member_data.email and member_data.email != db_member.email:
-        email_check = db.query(Member).filter(Member.email == member_data.email).first()
-        if email_check:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, 
-                detail="Email already in use by another member"
-            )
 
-    update_data = member_data.model_dump(exclude_unset=True)
-    # 수정할 때 비밀번호를 전달받으면 다시 암호화
-    if "password" in update_data and update_data["password"]:
-        update_data["password"] = get_password_hash(update_data["password"])
+# 7. 현재 로그인 유저 정보 조회 API
+@router.get("/me", response_model=MemberResponse)
+def get_current_member(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    if not token:
+        raise HTTPException(status_code=401, detail="인증 토큰이 없습니다.")
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise HTTPException(status_code=401, detail="유효하지 않은 토큰입니다.")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="토큰 검증에 실패했습니다.")
+        
+    user = db.query(Member).filter(Member.email == email).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+    return user
 
-    for key, value in update_data.items():
-        setattr(db_member, key, value)
-
-    db.commit()
-    db.refresh(db_member)
-    return db_member
-
-
-@router.delete("/{member_id}", status_code=status.HTTP_200_OK)
-def delete_member(member_id: int, db: Session = Depends(get_db)):
-    db_member = db.query(Member).filter(Member.id == member_id).first()
-    if not db_member:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
-
-    db.delete(db_member)
-    db.commit()
-    return {"message": f"Member ID {member_id} has been deleted successfully"}
