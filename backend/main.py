@@ -46,6 +46,11 @@ app.add_middleware(
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
+if "?" not in DATABASE_URL:
+    DATABASE_URL += "?sslmode=require"
+elif "sslmode=" not in DATABASE_URL:
+    DATABASE_URL += "&sslmode=require"
+
 # SQLAlchemy 엔진 생성 (SSL 자동 재연결 및 커넥션 풀 옵션 추가)
 engine = create_engine(
     DATABASE_URL,
