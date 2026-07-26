@@ -46,8 +46,17 @@ app.add_middleware(
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-engine = create_engine(DATABASE_URL)
+# SQLAlchemy 엔진 생성 (SSL 자동 재연결 및 커넥션 풀 옵션 추가)
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,       # 쿼리 실행 전 DB 연결 상태 자동 점검 (끊겼으면 재연결)
+    pool_recycle=300,         # 5분(300초)마다 커넥션 자동 갱신
+    pool_size=5,              # 커넥션 풀 크기
+    max_overflow=10           # 최대 오버플로우 커넥션
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
 Base = declarative_base()
 
 
