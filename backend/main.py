@@ -9,15 +9,15 @@ from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from pydantic import BaseModel
 from fastapi.security import OAuth2PasswordBearer
 
-# 1. OAuth2 패스워드 스킴 설정
+# .env 파일 환경변수 로드
+load_dotenv()
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+
+# 1. OAuth2 패스워드 스킴 설정 (FastAPI Swagger UI 지원)
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="/api/members/login",
     auto_error=False
 )
-
-# .env 파일 환경변수 로드
-load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 app = FastAPI(
     title="Ilshin Website API",
@@ -25,7 +25,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# 2. CORS 설정 (보안 강화: '*' 제거 및 실제 사용할 도메인 명시)
+# 2. CORS 설정 (Vercel 및 로컬 개발 환경 허용)
 origins = [
     "https://ilshin-website-theta.vercel.app",
     "https://vercel.com",
@@ -42,25 +42,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 3. Neon DB 연결 URL 설정 (postgresql:// 호환 변환)
+# 3. Neon DB 연결 URL 설정 (postgresql:// 호환 변환 및 SSL 처리)
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-if "?" not in DATABASE_URL:
+if DATABASE_URL and "?" not in DATABASE_URL:
     DATABASE_URL += "?sslmode=require"
-elif "sslmode=" not in DATABASE_URL:
+elif DATABASE_URL and "sslmode=" not in DATABASE_URL:
     DATABASE_URL += "&sslmode=require"
 
-# SQLAlchemy 엔진 생성 (SSL 자동 재연결 및 커넥션 풀 옵션 추가)
+# SQLAlchemy 엔진 생성 (자동 재연결 및 커넥션 풀 옵션)
 engine = create_engine(
     DATABASE_URL,
-    pool_pre_ping=True,       # 쿼리 실행 전 DB 연결 상태 자동 점검 (끊겼으면 재연결)
+    pool_pre_ping=True,       # 쿼리 실행 전 DB 연결 상태 자동 점검
     pool_recycle=300,         # 5분(300초)마다 커넥션 자동 갱신
     pool_size=5,              # 커넥션 풀 크기
     max_overflow=10           # 최대 오버플로우 커넥션
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 
 Base = declarative_base()
 
@@ -116,7 +115,7 @@ def get_db():
         db.close()
 
 
-# 7. 기본 메인 페이지
+# 7. 기본 메인 페이지 (헬스체크)
 @app.get("/")
 def read_root():
     return {
@@ -124,6 +123,7 @@ def read_root():
         "message": "Welcome to Ilshin Website API Server",
         "endpoints": {
             "company_list": "/api/company",
+            "member_login": "/api/members/login",
             "swagger_docs": "/docs"
         }
     }
