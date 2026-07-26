@@ -55,7 +55,6 @@ import { ref, onMounted } from 'vue';
 import { boardApi } from '../api/board';
 import { useAuth } from '../composables/useAuth';
 
-// currentUser 객체 함께 구조분해
 const { isLoggedIn, currentUser } = useAuth();
 
 const posts = ref([]);
@@ -85,16 +84,25 @@ const fetchPosts = async () => {
 const handleCreate = async () => {
   submitting.value = true;
   try {
-    // 1. 로그인 상태면 member 테이블의 name(또는 user_name) 사용
-    // 2. 비회원 상태면 입력받은 authorName 사용
-    const finalAuthorName = isLoggedIn.value 
-      ? (currentUser.value?.name || currentUser.value?.user_name)
-      : authorName.value;
+    let finalAuthorName = '';
+
+    if (isLoggedIn.value) {
+      // 1. currentUser 객체가 ref(reactive)일 수도 있고 일반 객체일 수도 있으므로 분기 처리
+      const userObj = currentUser.value || currentUser || {};
+      
+      // 2. DB name -> user_name -> username -> email 순으로 이름 추출
+      finalAuthorName = userObj.name 
+                     || userObj.user_name 
+                     || userObj.username 
+                     || (userObj.email ? userObj.email.split('@')[0] : '회원');
+    } else {
+      finalAuthorName = authorName.value;
+    }
 
     const payload = {
       title: title.value,
       content: content.value,
-      author_name: finalAuthorName || undefined,
+      author_name: finalAuthorName || '익명',
       password: isLoggedIn.value ? undefined : guestPassword.value
     };
 
