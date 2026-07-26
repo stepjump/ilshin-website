@@ -7,7 +7,7 @@ from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 import jwt
-from passlib.context import CryptContext
+import bcrypt
 
 try:
     from .main import Base, get_db
@@ -19,20 +19,22 @@ SECRET_KEY = os.getenv("JWT_SECRET_KEY", "ilshin_website_secret_key_change_me")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24시간
 
-# 비밀번호 암호화(Bcrypt) 모듈 세팅
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/members/login", auto_error=False)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """입력받은 비밀번호와 DB의 해시 비밀번호 일치 여부 확인"""
-    return pwd_context.verify(plain_password, hashed_password)
+    """입력받은 비밀번호와 DB의 해시 비밀번호 일치 여부 확인 (bcrypt 순수 사용)"""
+    try:
+        return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+    except Exception as e:
+        print(f"비밀번호 검증 오류: {e}")
+        return False
 
 
 def get_password_hash(password: str) -> str:
     """비밀번호 Bcrypt 암호화"""
-    return pwd_context.hash(password)
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
 
 
 # 1. DB 모델 정의
@@ -101,8 +103,8 @@ def create_access_token(data: dict):
     
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     if isinstance(encoded_jwt, bytes):
-        encoded_jwt = encoded_jwt.decode('utf-8')
-    return encoded_jwt
+        return encoded_jwt.decode('utf-8')
+    return str(encoded_jwt)
 
 
 def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> Optional[Member]:
@@ -129,36 +131,45 @@ def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(), 
     db: Session = Depends(get_db)
 ):
-    user = db.query(Member).filter(Member.email == form_data.username).first()
-    
-    # 암호화 검증 (verify_password 사용)
-    if not user or not verify_password(form_data.password, user.password):
+    try:
+        user = db.query(Member).filter(Member.email == form_data.username).first()
+        
+        # 암호화 검증 (verify_password 사용)
+        if not user or not verify_password(form_data.password, user.password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="이메일 또는 비밀번호가 올바르지 않습니다.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        if user.is_active != "Y":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="비활성화된 계정입니다."
+            )
+
+        # ★ JWT 페이로드에 sub, name, email을 함께 주입
+        access_token = create_access_token(data={
+            "sub": user.email,
+            "name": user.name,
+            "email": user.email
+        })
+
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "email": user.email,
+            "name": user.name,
+            "role": user.role or "user"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"로그인 예기치 않은 오류 발생: {e}")
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="이메일 또는 비밀번호가 올바르지 않습니다.",
-            headers={"WWW-Authenticate": "Bearer"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"서버 내부 오류: {str(e)}"
         )
-
-    if user.is_active != "Y":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="비활성화된 계정입니다."
-        )
-
-    # ★ JWT 페이로드에 sub, name, email을 함께 주입
-    access_token = create_access_token(data={
-        "sub": user.email,
-        "name": user.name,
-        "email": user.email
-    })
-
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "email": user.email,
-        "name": user.name,
-        "role": user.role
-    }
 
 
 @router.get("", response_model=List[MemberResponse])
