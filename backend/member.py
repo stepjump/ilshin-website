@@ -7,7 +7,10 @@ from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 import jwt
-from passlib.context import CryptContext
+# from passlib.context import CryptContext
+import bcrypt
+
+
 
 try:
     from .main import Base, get_db
@@ -20,19 +23,26 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24시간
 
 # 비밀번호 암호화(Bcrypt) 모듈 세팅
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/members/login", auto_error=False)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """입력받은 비밀번호와 DB의 해시 비밀번호 일치 여부 확인"""
-    return pwd_context.verify(plain_password, hashed_password)
-
+    """비밀번호 검증 (bcrypt 직접 사용)"""
+    try:
+        return bcrypt.checkpw(
+            plain_password.encode('utf-8'), 
+            hashed_password.encode('utf-8')
+        )
+    except Exception:
+        return False
 
 def get_password_hash(password: str) -> str:
-    """비밀번호 Bcrypt 암호화"""
-    return pwd_context.hash(password)
+    """비밀번호 해싱 (bcrypt 직접 사용)"""
+    pwd_bytes = password.encode('utf-8')
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pwd_bytes, salt).decode('utf-8')
 
 
 # 1. DB 모델 정의
