@@ -98,7 +98,11 @@ def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    if isinstance(encoded_jwt, bytes):
+        encoded_jwt = encoded_jwt.decode('utf-8')
+    return encoded_jwt
 
 
 def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> Optional[Member]:
@@ -141,7 +145,12 @@ def login_for_access_token(
             detail="비활성화된 계정입니다."
         )
 
-    access_token = create_access_token(data={"sub": user.email})
+    # ★ JWT 페이로드에 sub, name, email을 함께 주입
+    access_token = create_access_token(data={
+        "sub": user.email,
+        "name": user.name,
+        "email": user.email
+    })
 
     return {
         "access_token": access_token,
