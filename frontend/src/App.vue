@@ -6,7 +6,7 @@
         <router-link to="/">일신 홈페이지</router-link>
       </h1>
       <nav class="nav-links">
-        <router-link to="/board">게시판</router-link>
+        <router-link to="/board">자유게시판</router-link>
         
         <!-- 로그인 상태에 따라 다르게 표시 -->
         <span v-if="isLoggedIn" class="user-area">
