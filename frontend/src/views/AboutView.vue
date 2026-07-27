@@ -1,45 +1,52 @@
 <!-- frontend/src/views/AboutView.vue -->
 <template>
   <div class="about-container">
-    <h2>회사소개</h2>
-
-    <!-- 1. 로딩 중 표시 -->
+    <!-- 로딩 중 표시 -->
     <div v-if="loading" class="loading">
       회사소개 정보를 불러오는 중입니다...
     </div>
 
-    <!-- 2. 에러 발생 시 표시 -->
+    <!-- 에러 발생 시 표시 -->
     <div v-else-if="error" class="error">
       <p>{{ error }}</p>
       <button class="retry-btn" @click="fetchCompanyInfo">다시 시도</button>
     </div>
 
-    <!-- 3. 데이터 수신 성공시 표시 -->
+    <!-- 백엔드 데이터를 활용한 회사소개 카드 -->
     <div v-else-if="companyData" class="about-card">
-      <!-- 제목이 있는 경우 출력 -->
-      <h3 v-if="computedTitle" class="company-title">
-        {{ computedTitle }}
-      </h3>
+      <!-- 1. 회사명 & 슬로건 -->
+      <div class="header-section">
+        <h2 class="company-name">{{ companyData.name || '(주)일신' }}</h2>
+        <p v-if="companyData.slogan" class="slogan">
+          "{{ companyData.slogan }}"
+        </p>
+      </div>
 
-      <!-- 본문 내용 출력 (v-html 사용) -->
-      <div 
-        v-if="computedContent" 
-        class="company-content" 
-        v-html="computedContent"
-      ></div>
+      <hr class="divider" />
 
-      <!-- 만약 필드명이 안 맞아서 본문 출력이 안 되면, 아래 원본 데이터가 표시됩니다 -->
-      <div v-else class="debug-box">
-        <p>⚠️ <strong>데이터는 응답받았으나 출력할 필드를 찾지 못했습니다.</strong></p>
-        <p>백엔드에서 들어온 실제 JSON 데이터:</p>
-        <pre>{{ JSON.stringify(companyData, null, 2) }}</pre>
+      <!-- 2. 회사 소개 본문 -->
+      <div class="content-section">
+        <h3>기업 소개</h3>
+        <p class="about-text">{{ companyData.about }}</p>
+      </div>
+
+      <!-- 3. 주소 및 연락처 정보 -->
+      <div class="info-section">
+        <div v-if="companyData.address" class="info-item">
+          <span class="info-label">📍 주소</span>
+          <span class="info-value">{{ companyData.address }}</span>
+        </div>
+        <div v-if="companyData.phone" class="info-item">
+          <span class="info-label">📞 전화</span>
+          <span class="info-value">{{ companyData.phone }}</span>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import axios from 'axios';
 
 const API_URL = 'https://ilshin-website.onrender.com/api/company/1';
@@ -48,52 +55,17 @@ const companyData = ref(null);
 const loading = ref(true);
 const error = ref(null);
 
-// 백엔드가 배열([ { ... } ])로 넘겨주든 객체({ ... })로 넘겨주든 단일 객체로 정제
-const targetObject = computed(() => {
-  if (!companyData.value) return null;
-  if (Array.isArray(companyData.value)) {
-    return companyData.value[0] || null; // 배열인 경우 첫 번째 아이템 추출
-  }
-  return companyData.value;
-});
-
-// 제목 필드 탐색 (title, name, company_name 등)
-const computedTitle = computed(() => {
-  const obj = targetObject.value;
-  if (!obj) return '';
-  if (typeof obj === 'string') return '';
-  return obj.title || obj.name || obj.company_name || obj.subject || '';
-});
-
-// 본문 필드 탐색 (content, info, description, details, body 등)
-const computedContent = computed(() => {
-  const obj = targetObject.value;
-  if (!obj) return '';
-  // 단순 문자열로 넘어왔을 경우
-  if (typeof obj === 'string') return obj;
-
-  return obj.content || 
-         obj.info || 
-         obj.description || 
-         obj.details || 
-         obj.body || 
-         obj.company_info || 
-         obj.detail || '';
-});
-
 const fetchCompanyInfo = async () => {
   try {
     loading.value = true;
     error.value = null;
     
     const response = await axios.get(API_URL);
-    console.log('API Response Data:', response.data);
-    
     companyData.value = response.data;
   } catch (err) {
     console.error('회사소개 불러오기 실패:', err);
     if (err.response) {
-      error.value = `회사소개 정보를 불러오지 못했습니다. (응답 상태 코드: ${err.response.status})`;
+      error.value = `회사소개 정보를 불러오지 못했습니다. (상태 코드: ${err.response.status})`;
     } else {
       error.value = `서버 연결에 실패했습니다. (${err.message})`;
     }
@@ -116,58 +88,84 @@ onMounted(() => {
 
 .about-card {
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 2rem;
+  border-radius: 12px;
+  padding: 2.5rem;
   background-color: #ffffff;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
-.company-title {
-  margin-top: 0;
+.header-section {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.company-name {
+  font-size: 2rem;
   color: #1e293b;
-  font-size: 1.5rem;
-  margin-bottom: 1rem;
-  border-bottom: 2px solid #3b82f6;
-  padding-bottom: 0.5rem;
+  margin: 0 0 0.5rem 0;
+  font-weight: 700;
 }
 
-.company-content {
-  line-height: 1.7;
+.slogan {
+  font-size: 1.1rem;
+  color: #3b82f6;
+  font-weight: 600;
+  margin: 0;
+}
+
+.divider {
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  margin: 1.5rem 0;
+}
+
+.content-section {
+  margin-bottom: 2rem;
+}
+
+.content-section h3 {
+  font-size: 1.25rem;
   color: #334155;
-}
-
-.company-content :deep(img) {
-  max-width: 100%;
-  height: auto;
-  border-radius: 4px;
-}
-
-.company-content :deep(p) {
   margin-bottom: 0.75rem;
+  border-left: 4px solid #3b82f6;
+  padding-left: 0.5rem;
 }
 
-.debug-box {
-  margin-top: 1rem;
-  padding: 1rem;
+.about-text {
+  line-height: 1.8;
+  color: #475569;
+  font-size: 1.05rem;
+  white-space: pre-line; /* 줄바꿈 유지 */
+}
+
+.info-section {
   background-color: #f8fafc;
-  border: 1px dashed #cbd5e1;
-  border-radius: 6px;
-  font-size: 0.9rem;
+  border-radius: 8px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
-.debug-box pre {
-  background: #1e293b;
-  color: #f8fafc;
-  padding: 1rem;
-  border-radius: 4px;
-  overflow-x: auto;
-  white-space: pre-wrap;
-  word-break: break-all;
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.info-label {
+  font-weight: 600;
+  color: #64748b;
+  min-width: 70px;
+}
+
+.info-value {
+  color: #1e293b;
 }
 
 .loading, .error {
   text-align: center;
-  padding: 2rem;
+  padding: 3rem;
   color: #64748b;
 }
 
@@ -177,11 +175,11 @@ onMounted(() => {
 
 .retry-btn {
   margin-top: 0.75rem;
-  padding: 0.4rem 0.8rem;
+  padding: 0.5rem 1rem;
   background: #3b82f6;
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
 }
 </style>
