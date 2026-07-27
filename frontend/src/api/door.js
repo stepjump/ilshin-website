@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 // 백엔드 API 기본 URL (Render 서버)
-const API_URL = 'https://ilshin-website.onrender.com/api/door-info';
+const API_URL = 'https://ilshin-website.onrender.com/api/door-info/';
 
 export const doorApi = {
   // 전체 도어 정보 목록 가져오기
