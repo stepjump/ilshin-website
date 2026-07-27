@@ -1,6 +1,6 @@
 <template>
   <div class="board-container">
-    <h2>자유 게시판</h2>
+    <h2>게시판</h2>
 
     <!-- 새 글 작성 폼 -->
     <div class="write-box">
