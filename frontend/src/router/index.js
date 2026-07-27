@@ -7,7 +7,8 @@ import HomeView from '../views/HomeView.vue' // ★ 이 줄이 누락되어 발�
 const routes = [
   {
     path: '/',
-    redirect: HomeView // 홈페이지 처음 방문 시 로드됨
+    name: 'home',
+    component: HomeView // 홈페이지 처음 방문 시 로드됨
   },
   {
     path: '/login',
