@@ -14,6 +14,11 @@
 
     <!-- 백엔드 데이터를 활용한 회사소개 카드 -->
     <div v-else-if="companyData" class="about-card">
+      <!-- 관리자 전용 수정 버튼 -->
+      <div v-if="isAdmin" class="admin-bar">
+        <button class="edit-btn" @click="openEditModal">✏️ 회사소개 수정 (관리자)</button>
+      </div>
+
       <!-- 1. 회사명 & 슬로건 -->
       <div class="header-section">
         <h2 class="company-name">{{ companyData.name || '(주)일신' }}</h2>
@@ -42,11 +47,52 @@
         </div>
       </div>
     </div>
+
+    <!-- ✏️ 관리자 수정 모달 창 -->
+    <div v-if="showEditModal" class="modal-overlay" @click.self="closeEditModal">
+      <div class="modal-content">
+        <h3>회사소개 정보 수정</h3>
+        
+        <form @submit.prevent="handleUpdate">
+          <div class="form-group">
+            <label>회사명</label>
+            <input type="text" v-model="editForm.name" required />
+          </div>
+
+          <div class="form-group">
+            <label>슬로건</label>
+            <input type="text" v-model="editForm.slogan" placeholder="예: 신뢰와 기술로 미래를 열어가는 기업" />
+          </div>
+
+          <div class="form-group">
+            <label>기업 소개 (본문)</label>
+            <textarea v-model="editForm.about" rows="5" required></textarea>
+          </div>
+
+          <div class="form-group">
+            <label>주소</label>
+            <input type="text" v-model="editForm.address" />
+          </div>
+
+          <div class="form-group">
+            <label>전화번호</label>
+            <input type="text" v-model="editForm.phone" />
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="cancel-btn" @click="closeEditModal">취소</button>
+            <button type="submit" class="save-btn" :disabled="saving">
+              {{ saving ? '저장 중...' : '저장하기' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
 
 const API_URL = 'https://ilshin-website.onrender.com/api/company/1';
@@ -55,6 +101,41 @@ const companyData = ref(null);
 const loading = ref(true);
 const error = ref(null);
 
+// 관리자 수정 관련 상태
+const showEditModal = ref(false);
+const saving = ref(false);
+const editForm = ref({
+  name: '',
+  slogan: '',
+  about: '',
+  address: '',
+  phone: ''
+});
+
+// 관리자 로그인 권한 체크 (localStorage 내부 여러 키 탐색)
+const isAdmin = computed(() => {
+  try {
+    const keys = ['user', 'userInfo', 'auth', 'token'];
+    for (const key of keys) {
+      const item = localStorage.getItem(key);
+      if (!item) continue;
+      
+      try {
+        const parsed = JSON.parse(item);
+        if (parsed.role === 'admin' || parsed.username === 'admin' || parsed.isAdmin === true) {
+          return true;
+        }
+      } catch {
+        if (item === 'admin' || item.includes('admin')) return true;
+      }
+    }
+  } catch (e) {
+    console.error('관리자 권한 확인 중 오류:', e);
+  }
+  return false;
+});
+
+// 회사 정보 조회 (GET)
 const fetchCompanyInfo = async () => {
   try {
     loading.value = true;
@@ -74,6 +155,52 @@ const fetchCompanyInfo = async () => {
   }
 };
 
+// 수정 모달 열기
+const openEditModal = () => {
+  if (companyData.value) {
+    editForm.value = {
+      name: companyData.value.name || '',
+      slogan: companyData.value.slogan || '',
+      about: companyData.value.about || '',
+      address: companyData.value.address || '',
+      phone: companyData.value.phone || ''
+    };
+  }
+  showEditModal.value = true;
+};
+
+// 수정 모달 닫기
+const closeEditModal = () => {
+  showEditModal.value = false;
+};
+
+// 수정 요청 전송 (PUT / PATCH)
+const handleUpdate = async () => {
+  try {
+    saving.value = true;
+    
+    // PUT 요청 시도
+    const response = await axios.put(API_URL, editForm.value);
+    companyData.value = response.data;
+    alert('회사소개가 성공적으로 수정되었습니다.');
+    closeEditModal();
+  } catch (err) {
+    console.warn('PUT 수정 실패, PATCH로 재시도합니다:', err);
+    try {
+      // PUT에 실패할 경우 PATCH로 자동 재시도
+      const patchResponse = await axios.patch(API_URL, editForm.value);
+      companyData.value = patchResponse.data;
+      alert('회사소개가 성공적으로 수정되었습니다.');
+      closeEditModal();
+    } catch (patchErr) {
+      console.error('회사소개 수정 실패:', patchErr);
+      alert('수정에 실패했습니다. 서버 상태 또는 API 권한을 확인해 주세요.');
+    }
+  } finally {
+    saving.value = false;
+  }
+};
+
 onMounted(() => {
   fetchCompanyInfo();
 });
@@ -87,11 +214,33 @@ onMounted(() => {
 }
 
 .about-card {
+  position: relative;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   padding: 2.5rem;
   background-color: #ffffff;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.admin-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
+}
+
+.edit-btn {
+  background-color: #059669;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.edit-btn:hover {
+  background-color: #047857;
 }
 
 .header-section {
@@ -135,7 +284,7 @@ onMounted(() => {
   line-height: 1.8;
   color: #475569;
   font-size: 1.05rem;
-  white-space: pre-line; /* 줄바꿈 유지 */
+  white-space: pre-line;
 }
 
 .info-section {
@@ -161,6 +310,87 @@ onMounted(() => {
 
 .info-value {
   color: #1e293b;
+}
+
+/* 모달 레이아웃 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 550px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.modal-content h3 {
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  color: #0f172a;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+  color: #334155;
+  font-size: 0.9rem;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  padding: 0.6rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  box-sizing: border-box;
+  font-size: 0.95rem;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.cancel-btn {
+  padding: 0.5rem 1rem;
+  background: #e2e8f0;
+  color: #475569;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.save-btn {
+  padding: 0.5rem 1rem;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.save-btn:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
 }
 
 .loading, .error {
