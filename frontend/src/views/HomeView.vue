@@ -2,8 +2,8 @@
 <template>
   <div class="home-container">
     <section class="hero-section">
-      <h1>일신 소개</h1>
-      <p>엄격한 품질 관리로 제작된 일신의 주요 도어 제품을 소개합니다.</p>
+      <h1>앞대문 내용</h1>
+      <p>엄격한 품질 관리로 제작된 일신의 주요 제품을 소개합니다.</p>
     </section>
 
     <!-- 로딩 상태 -->
