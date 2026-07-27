@@ -6,6 +6,10 @@
         <router-link to="/">일신 홈페이지</router-link>
       </h1>
       <nav class="nav-links">
+        <!-- ★ 자유게시판 왼쪽에 회사소개 메뉴 추가 -->
+        <router-link to="/about">회사소개</router-link>
+        
+        <!-- 자유게시판 -->
         <router-link to="/board">자유게시판</router-link>
         
         <!-- 로그인 상태에 따라 다르게 표시 -->

@@ -1,30 +1,35 @@
-
 import { createRouter, createWebHistory } from 'vue-router';
+import HomeView from '../views/HomeView.vue';
 import LoginView from '../views/LoginView.vue';
 import BoardView from '../views/BoardView.vue';
-import HomeView from '../views/HomeView.vue' // ★ 이 줄이 누락되어 발생한 오류입니다!
+import AboutView from '../views/AboutView.vue'; // ★ 회사소개 뷰 임포트
 
 const routes = [
   {
     path: '/',
-    name: 'home',
-    component: HomeView // 홈페이지 처음 방문 시 로드됨
+    name: 'Home',
+    component: HomeView
   },
   {
-    path: '/login',
-    name: 'Login',
-    component: LoginView,
+    path: '/about',
+    name: 'About',
+    component: AboutView // ★ 자유게시판 왼쪽 회사소개 페이지
   },
   {
     path: '/board',
     name: 'Board',
-    component: BoardView,
+    component: BoardView
   },
+  {
+    path: '/login',
+    name: 'Login',
+    component: LoginView
+  }
 ];
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  routes,
+  routes
 });
 
 export default router;
