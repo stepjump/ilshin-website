@@ -16,9 +16,13 @@
     <!-- active API에서 받아온 도어 정보 표시 -->
     <div v-else-if="doorData" class="door-card">
       <h3>버전: {{ doorData.ver }}</h3>
-      <p class="info-text">{{ doorData.info }}</p>
+      
+      <!-- ★ v-html을 사용하여 DB의 HTML 태그를 그대로 해석하여 출력합니다 -->
+      <div class="info-text" v-html="doorData.info"></div>
+      
       <span class="status-badge">사용 여부: {{ doorData.useyn }}</span>
     </div>
+
   </div>
 </template>
 
