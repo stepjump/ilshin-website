@@ -12,5 +12,8 @@ export const doorApi = {
   getActiveDoorInfo: () => axios.get(`${API_BASE_URL}/active`),
 
   // 단일 도어 정보 조회
-  getDoorInfoById: (id) => axios.get(`${API_BASE_URL}/${id}`)
+  getDoorInfoById: (id) => axios.get(`${API_BASE_URL}/${id}`),
+
+  // ★ 신규 도어 정보 생성 (어드민 저장용)
+  createDoorInfo: (data) => axios.post(`${API_BASE_URL}/`, data)
 };
