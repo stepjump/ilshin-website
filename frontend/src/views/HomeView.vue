@@ -16,12 +16,12 @@
     <!-- active API에서 받아온 도어 정보 표시 -->
     <div v-else-if="doorData" class="door-card">
       <div class="card-header">
-        <!-- ★ 버전 뱃지 클릭 시 관리자라면 바로 수정 모달 오픈 -->
+        <!-- ★ 버전 뱃지 클릭 시 모달 열기 이벤트 연결 -->
         <span 
           class="version-badge" 
           :class="{ 'clickable': isAdmin }"
-          @click="isAdmin && openEditModal()"
-          :title="isAdmin ? '클릭하여 내용 수정' : ''"
+          @click="handleVersionClick"
+          :title="isAdmin ? '클릭하여 앞대문 내용 수정' : '어드민 권한이 필요합니다'"
         >
           버전 v{{ doorData.ver }} {{ isAdmin ? '✏️' : '' }}
         </span>
@@ -70,20 +70,42 @@ const showModal = ref(false);
 const editInfo = ref('');
 const saving = ref(false);
 
-// 다음 예상 버전 계산
+// ★ 다음 예상 버전 계산 (문자열/숫자 타입 안전 처리)
 const nextVersion = computed(() => {
   if (!doorData.value || doorData.value.ver === undefined) return 1;
   const currentVer = parseInt(doorData.value.ver, 10);
   return isNaN(currentVer) ? 1 : currentVer + 1;
 });
 
-// admin 로그인 상태 체크 (localStorage 기반)
+// ★ 유연한 admin 로그인 상태 체크 (다양한 localStorage Key 및 상태 검증)
 const isAdmin = computed(() => {
-  const userJson = localStorage.getItem('user');
-  if (!userJson) return false;
+  // 1. 단순 role / token 형태 검사
+  const role = localStorage.getItem('role');
+  if (role === 'admin') return true;
+
+  // 2. 다양한 사용자 저장 키 형태 체크 (user, userInfo, auth, currentUser 등)
+  const rawUser = localStorage.getItem('user') || 
+                  localStorage.getItem('userInfo') || 
+                  localStorage.getItem('auth') ||
+                  localStorage.getItem('currentUser');
+  
+  if (!rawUser) {
+    // 토큰이 존재하는지 확인 (토큰 기반 인증 환경 대응)
+    const token = localStorage.getItem('token') || localStorage.getItem('access_token');
+    return !!token;
+  }
+
+  // 단순 'admin' 문자열로 저장되어 있는 경우
+  if (rawUser === 'admin') return true;
+
   try {
-    const user = JSON.parse(userJson);
-    return user.role === 'admin' || user.username === 'admin';
+    const user = JSON.parse(rawUser);
+    return (
+      user.role === 'admin' ||
+      user.username === 'admin' ||
+      user.is_admin === true ||
+      user.isAdmin === true
+    );
   } catch (e) {
     return false;
   }
@@ -102,6 +124,15 @@ const fetchActiveDoorInfo = async () => {
   } finally {
     loading.value = false;
   }
+};
+
+// ★ 버전 뱃지 클릭 핸들러
+const handleVersionClick = () => {
+  if (!isAdmin.value) {
+    alert('대문 수정 권한이 없습니다. (어드민 계정으로 로그인 후 이용해 주세요)');
+    return;
+  }
+  openEditModal();
 };
 
 // 모달 열기
@@ -133,7 +164,7 @@ const saveNewDoorInfo = async () => {
     });
     alert('새로운 대문 내용이 정상적으로 적용되었습니다.');
     showModal.value = false;
-    await fetchActiveDoorInfo();
+    await fetchActiveDoorInfo(); // 새 대문 데이터 재조회
   } catch (err) {
     console.error('대문 수정 실패:', err);
     alert('대문 내용 저장 중 오류가 발생했습니다.');
@@ -169,7 +200,7 @@ onMounted(() => {
   margin-bottom: 1rem;
 }
 
-/* ★ 버전 뱃지 스타일 */
+/* ★ 버전 뱃지 스타일 & 버튼 반응형 스타일 */
 .version-badge {
   font-size: 0.85rem;
   font-weight: 600;
@@ -182,7 +213,7 @@ onMounted(() => {
   transition: all 0.2s ease;
 }
 
-/* ★ 클릭 가능한 관리자 전용 버전 뱃지 hover 효과 */
+/* 클릭 가능한 어드민 모드 호버 효과 */
 .version-badge.clickable {
   cursor: pointer;
 }
@@ -199,6 +230,7 @@ onMounted(() => {
   color: #334155;
 }
 
+/* v-html 내부 태그 스타일 정돈 */
 .info-text :deep(img) {
   max-width: 100%;
   height: auto;
