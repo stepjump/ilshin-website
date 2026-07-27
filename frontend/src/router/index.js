@@ -6,7 +6,7 @@ import BoardView from '../views/BoardView.vue';
 const routes = [
   {
     path: '/',
-    redirect: '/board',
+    redirect: HomeView // 홈페이지 처음 방문 시 로드됨
   },
   {
     path: '/login',
