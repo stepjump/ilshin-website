@@ -14,6 +14,12 @@ export const doorApi = {
   // 단일 도어 정보 조회
   getDoorInfoById: (id) => axios.get(`${API_BASE_URL}/${id}`),
 
-  // ★ 신규 도어 정보 생성 (어드민 저장용)
-  createDoorInfo: (data) => axios.post(`${API_BASE_URL}/`, data)
+  // ★ 신규 도어 정보 생성 (어드민 저장용 - ver 자동 1 증가)
+  createDoorInfo: (data) => axios.post(`${API_BASE_URL}/`, data),
+
+  // 도어 정보 수정
+  updateDoorInfo: (id, data) => axios.put(`${API_BASE_URL}/${id}`, data),
+
+  // 도어 정보 삭제
+  deleteDoorInfo: (id) => axios.delete(`${API_BASE_URL}/${id}`)
 };

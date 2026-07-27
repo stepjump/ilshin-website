@@ -33,7 +33,7 @@
       <div class="modal-content">
         <h3>앞대문 내용 수정 (새 버전 생성)</h3>
         <p class="modal-desc">
-          내용을 수정하고 저장하면 <strong>버전 v{{ doorData ? doorData.ver + 1 : 1 }}</strong>로 자동 생성 및 적용됩니다. HTML 태그 작성이 가능합니다.
+          내용을 수정하고 저장하면 <strong>버전 v{{ nextVersion }}</strong>로 자동 생성 및 적용됩니다. HTML 태그 작성이 가능합니다.
         </p>
 
         <textarea 
@@ -67,7 +67,14 @@ const showModal = ref(false);
 const editInfo = ref('');
 const saving = ref(false);
 
-// ★ admin 로그인 상태인지 체크 (localStorage의 user/role 정보 기반)
+// ★ 다음 예상 버전 계산 (문자열/숫자 타입 안전 처리)
+const nextVersion = computed(() => {
+  if (!doorData.value || doorData.value.ver === undefined) return 1;
+  const currentVer = parseInt(doorData.value.ver, 10);
+  return isNaN(currentVer) ? 1 : currentVer + 1;
+});
+
+// ★ admin 로그인 상태 체크 (localStorage 기반)
 const isAdmin = computed(() => {
   const userJson = localStorage.getItem('user');
   if (!userJson) return false;
@@ -83,6 +90,7 @@ const isAdmin = computed(() => {
 const fetchActiveDoorInfo = async () => {
   try {
     loading.value = true;
+    error.value = null;
     const response = await doorApi.getActiveDoorInfo();
     doorData.value = response.data;
   } catch (err) {
@@ -103,6 +111,7 @@ const openEditModal = () => {
 
 // 모달 닫기
 const closeModal = () => {
+  if (saving.value) return;
   showModal.value = false;
 };
 
@@ -115,7 +124,7 @@ const saveNewDoorInfo = async () => {
 
   try {
     saving.value = true;
-    // ver를 넘기지 않으면 백엔드(door_info.py)에서 기존 MAX(ver) + 1 로 저장함
+    // ver를 전달하지 않으면 백엔드(door_info.py)에서 MAX(ver) + 1 로 자동 저장
     await doorApi.createDoorInfo({
       info: editInfo.value,
       useyn: 'Y'
@@ -190,10 +199,15 @@ onMounted(() => {
   color: #334155;
 }
 
+/* ★ v-html 내부 태그 스타일 정돈 */
 .info-text :deep(img) {
   max-width: 100%;
   height: auto;
   border-radius: 4px;
+}
+
+.info-text :deep(p) {
+  margin-bottom: 0.75rem;
 }
 
 .loading, .error {
@@ -276,7 +290,12 @@ onMounted(() => {
   font-weight: 500;
 }
 
-.save-btn:hover {
+.save-btn:hover:not(:disabled) {
   background: #1d4ed8;
+}
+
+.save-btn:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
 }
 </style>
