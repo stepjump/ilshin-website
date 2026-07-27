@@ -13,11 +13,13 @@
       {{ error }}
     </div>
 
-    <!-- API에서 불러온 회사소개 정보 표시 -->
+    <!-- API에서 받아온 단일 회사소개 정보 표시 -->
     <div v-else-if="companyData" class="about-card">
-      <h3 v-if="companyData.title" class="company-title">{{ companyData.title }}</h3>
-      
-      <!-- DB의 HTML/텍스트 내용 출력 -->
+      <h3 v-if="companyData.title" class="company-title">
+        {{ companyData.title }}
+      </h3>
+
+      <!-- v-html을 이용하여 DB에 저장된 HTML 태그/문구 출력 -->
       <div 
         class="company-content" 
         v-html="companyData.content || companyData.info || companyData.description"
@@ -30,8 +32,8 @@
 import { ref, onMounted } from 'vue';
 import axios from 'axios';
 
-// 백엔드 Render URL 기준 API
-const API_URL = 'https://ilshin-website.onrender.com/api/company';
+// ★ ID 1번 단일 데이터 조회 API 엔드포인트
+const API_URL = 'https://ilshin-website.onrender.com/api/company/1';
 
 const companyData = ref(null);
 const loading = ref(true);
