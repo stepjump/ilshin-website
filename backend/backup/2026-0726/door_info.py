@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, List, Union
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import Column, Integer, Text, String, DateTime
 from sqlalchemy.orm import Session
@@ -22,15 +22,15 @@ class DoorInfo(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     info = Column(Text, nullable=False)
-    ver = Column(String(50), nullable=False)  # ★ 'v1.0.0' 문자를 수용할 수 있도록 String으로 변경
+    ver = Column(Integer, nullable=False)
     useyn = Column(String(1), default="Y")
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
-# 2. Pydantic 스키마
+# 2. Pydantic 스키마 (중복 제거)
 class DoorInfoBase(BaseModel):
     info: str
-    ver: Union[str, int]  # ★ 문자열('v1.0.0')과 숫자(1) 모두 허용
+    ver: int
     useyn: Optional[str] = "Y"
 
 class DoorInfoCreate(DoorInfoBase):
@@ -38,7 +38,7 @@ class DoorInfoCreate(DoorInfoBase):
 
 class DoorInfoUpdate(BaseModel):
     info: Optional[str] = None
-    ver: Optional[Union[str, int]] = None
+    ver: Optional[int] = None
     useyn: Optional[str] = None
 
 class DoorInfoResponse(DoorInfoBase):
@@ -50,16 +50,9 @@ class DoorInfoResponse(DoorInfoBase):
 
 
 # 3. CRUD API
-
-# POST /api/door-info 및 /api/door-info/ 둘 다 지원
-@router.post("", response_model=DoorInfoResponse, status_code=status.HTTP_201_CREATED)
 @router.post("/", response_model=DoorInfoResponse, status_code=status.HTTP_201_CREATED)
 def create_door_info(item: DoorInfoCreate, db: Session = Depends(get_db)):
     db_item = DoorInfo(**item.model_dump())
-    # ver 값이 숫자로 들어온 경우 문자열로 변환하여 DB 저장
-    if isinstance(db_item.ver, int):
-        db_item.ver = str(db_item.ver)
-        
     db.add(db_item)
     db.commit()
     db.refresh(db_item)
@@ -74,8 +67,6 @@ def get_active_door_info(db: Session = Depends(get_db)):
     return active_item
 
 
-# GET /api/door-info 및 /api/door-info/ 둘 다 지원 (CORS 리다이렉트 방지)
-@router.get("", response_model=List[DoorInfoResponse])
 @router.get("/", response_model=List[DoorInfoResponse])
 def get_all_door_info(db: Session = Depends(get_db)):
     return db.query(DoorInfo).order_by(DoorInfo.id.desc()).all()
@@ -96,9 +87,6 @@ def update_door_info(info_id: int, update_data: DoorInfoUpdate, db: Session = De
         raise HTTPException(status_code=404, detail="해당 데이터를 찾을 수 없습니다.")
     
     update_dict = update_data.model_dump(exclude_unset=True)
-    if "ver" in update_dict and isinstance(update_dict["ver"], int):
-        update_dict["ver"] = str(update_dict["ver"])
-
     for key, value in update_dict.items():
         setattr(item, key, value)
         
