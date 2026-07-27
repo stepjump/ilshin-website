@@ -94,8 +94,11 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
+import { useAuth } from '../composables/useAuth'; // ★ 앱의 인증 상태 임포트
 
 const API_URL = 'https://ilshin-website.onrender.com/api/company/1';
+
+const { currentUser, isLoggedIn } = useAuth();
 
 const companyData = ref(null);
 const loading = ref(true);
@@ -112,26 +115,52 @@ const editForm = ref({
   phone: ''
 });
 
-// 관리자 로그인 권한 체크 (localStorage 내부 여러 키 탐색)
+// ★ 강화된 관리자 판별 조건 (useAuth 반응형 상태 + localStorage 전수 조사)
 const isAdmin = computed(() => {
+  // 1. useAuth의 currentUser 객체 검사
+  if (currentUser.value) {
+    const user = currentUser.value;
+    if (
+      user.role === 'admin' || 
+      user.username === 'admin' || 
+      user.id === 'admin' || 
+      user.name === 'admin' ||
+      user.email?.includes('admin') ||
+      user.isAdmin === true
+    ) {
+      return true;
+    }
+  }
+
+  // 2. localStorage 내 모든 데이터 키 검색 (App.vue/HomeView 방식과 동기화)
   try {
-    const keys = ['user', 'userInfo', 'auth', 'token'];
+    const keys = ['user', 'userInfo', 'auth', 'token', 'admin', 'isLoggedIn'];
     for (const key of keys) {
       const item = localStorage.getItem(key);
       if (!item) continue;
-      
+
+      if (item === 'admin' || item === 'true') return true;
+
       try {
         const parsed = JSON.parse(item);
-        if (parsed.role === 'admin' || parsed.username === 'admin' || parsed.isAdmin === true) {
+        if (
+          parsed.role === 'admin' || 
+          parsed.username === 'admin' || 
+          parsed.id === 'admin' ||
+          parsed.isAdmin === true
+        ) {
           return true;
         }
       } catch {
-        if (item === 'admin' || item.includes('admin')) return true;
+        if (typeof item === 'string' && item.toLowerCase().includes('admin')) {
+          return true;
+        }
       }
     }
   } catch (e) {
-    console.error('관리자 권한 확인 중 오류:', e);
+    console.error('관리자 권한 확인 오류:', e);
   }
+
   return false;
 });
 
@@ -187,7 +216,6 @@ const handleUpdate = async () => {
   } catch (err) {
     console.warn('PUT 수정 실패, PATCH로 재시도합니다:', err);
     try {
-      // PUT에 실패할 경우 PATCH로 자동 재시도
       const patchResponse = await axios.patch(API_URL, editForm.value);
       companyData.value = patchResponse.data;
       alert('회사소개가 성공적으로 수정되었습니다.');
