@@ -12,6 +12,20 @@ git push origin main
 =========================================================================
 
 =========================================================================
+[GIT 잘못됐을때]
+D:\20260527_TRY\일신홈페이지\ilshin-website>git branch
+* (HEAD detached from 81cd503)
+  main
+
+git stash
+
+git checkout main
+
+git add .
+git commit -m "일신 홈페이지 GIT 정상화 적용"
+git push origin main
+
+=========================================================================
 [그전상태복구]
 # 1. 방금 올린 커밋을 취소(반전)하는 커밋 생성
 git revert HEAD --no-edit
