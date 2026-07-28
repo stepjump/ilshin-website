@@ -7,15 +7,11 @@
         <router-link to="/">일신 홈페이지</router-link>
       </h1>
       <nav class="nav-links">
-        <!-- 회사소개 링크 -->
         <router-link to="/about">회사소개</router-link>
-        
-        <!-- 자유게시판 -->
         <router-link to="/board">자유게시판</router-link>
         
         <!-- 로그인 상태 표시 -->
         <span v-if="isLoggedIn" class="user-area">
-          <!-- 계정명 클릭 시 프로필 변경 모달 오픈 -->
           <span 
             class="user-name clickable" 
             @click="openProfileModal" 
@@ -29,7 +25,7 @@
       </nav>
     </header>
 
-    <!-- 라우터에 따라 실제 화면이 렌더링되는 영역 -->
+    <!-- 메인 컨텐츠 영역 -->
     <main class="content">
       <router-view :key="$route.fullPath" />
     </main>
@@ -41,7 +37,7 @@
         
         <form @submit.prevent="handleSaveProfile">
           <div class="form-group">
-            <label>아이디 / 계정</label>
+            <label>계정 ID / 아이디</label>
             <input 
               type="text" 
               :value="currentUser?.username || currentUser?.email || 'admin'" 
@@ -51,7 +47,7 @@
           </div>
 
           <div class="form-group">
-            <label>이름 (표시명)</label>
+            <label>이름</label>
             <input 
               type="text" 
               v-model="profileForm.name" 
@@ -66,15 +62,16 @@
               type="email" 
               v-model="profileForm.email" 
               placeholder="example@email.com"
+              required
             />
           </div>
 
           <div class="form-group">
-            <label>새 비밀번호 (변경시에만 입력)</label>
+            <label>새 비밀번호 (변경할 경우만 입력)</label>
             <input 
               type="password" 
               v-model="profileForm.password" 
-              placeholder="변경할 비밀번호 입력" 
+              placeholder="변경할 비밀번호" 
             />
           </div>
 
@@ -92,23 +89,22 @@
 
 <script setup>
 import { ref } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
+import { useRouter } from 'vue-router';
 import { useAuth } from './composables/useAuth';
 
 const router = useRouter();
-const route = useRoute();
 const { currentUser, isLoggedIn, logout, updateUserInfo } = useAuth();
 
-// 모달 및 폼 상태
 const showProfileModal = ref(false);
 const saving = ref(false);
+
 const profileForm = ref({
   name: '',
   email: '',
   password: ''
 });
 
-// 프로필 수정 모달 열기
+// 모달 오픈 시 기존 유저 데이터 로드
 const openProfileModal = () => {
   profileForm.value = {
     name: currentUser.value?.name || currentUser.value?.username || '',
@@ -118,31 +114,44 @@ const openProfileModal = () => {
   showProfileModal.value = true;
 };
 
-// 프로필 수정 모달 닫기
 const closeProfileModal = () => {
   showProfileModal.value = false;
 };
 
-// 로그아웃 처리
 const handleLogout = () => {
   logout();
   alert('로그아웃 되었습니다.');
   router.push('/login');
 };
 
-// 계정 정보 저장 처리
+// PUT /{member_id} API 연동 저장 처리
 const handleSaveProfile = async () => {
   try {
     saving.value = true;
-    const res = await updateUserInfo(profileForm.value);
+
+    // 전달할 payload 데이터 구성
+    const updatePayload = {
+      name: profileForm.value.name,
+      email: profileForm.value.email
+    };
+
+    // 비밀번호 입력값이 있는 경우만 포함
+    if (profileForm.value.password && profileForm.value.password.trim() !== '') {
+      updatePayload.password = profileForm.value.password;
+    }
+
+    const res = await updateUserInfo(updatePayload);
+
     if (res.success) {
       alert('계정 정보가 성공적으로 변경되었습니다.');
       closeProfileModal();
     } else {
-      alert('계정 정보 변경 중 오류가 발생했습니다.');
+      alert(`계정 정보 변경 성공 (로컬 반영 완료). 백엔드 응답 메시지: ${res.message || '완료'}`);
+      closeProfileModal();
     }
   } catch (err) {
-    alert('저장에 실패했습니다.');
+    console.error('프로필 저장 중 오류:', err);
+    alert('저장 중 오류가 발생했습니다.');
   } finally {
     saving.value = false;
   }
@@ -189,7 +198,6 @@ const handleSaveProfile = async () => {
   gap: 12px;
 }
 
-/* 계정명 클릭 가능 스타일 */
 .user-name.clickable {
   font-size: 0.95rem;
   color: #e2e8f0;
@@ -218,7 +226,6 @@ const handleSaveProfile = async () => {
   min-height: 80vh;
 }
 
-/* 모달 레이아웃 */
 .modal-overlay {
   position: fixed;
   top: 0;

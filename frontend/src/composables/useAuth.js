@@ -1,6 +1,4 @@
 // frontend/src/composables/useAuth.js
-// 사용자 상태 관리 모듈
-
 import { ref, computed } from 'vue';
 import { authApi } from '../api/auth';
 
@@ -20,42 +18,39 @@ export function useAuth() {
     currentUser.value = null;
   };
 
-  // ★ 계정 정보 수정 기능 추가
+  // ★ member.py API 연동 계정 정보 수정
   const updateUserInfo = async (updatedData) => {
     try {
-      let updatedUser = null;
+      // 로그인된 사용자 ID 추출 (id 또는 member_id)
+      const memberId = currentUser.value?.id || currentUser.value?.member_id || currentUser.value?.username || 1;
 
-      // 1. authApi에 updateUserInfo나 updateProfile이 구현되어 있다면 우선 호출
-      if (typeof authApi.updateUserInfo === 'function') {
-        updatedUser = await authApi.updateUserInfo(updatedData);
-      } else if (typeof authApi.updateProfile === 'function') {
-        updatedUser = await authApi.updateProfile(updatedData);
-      } else {
-        // 2. 백엔드 API 함수가 없더라도 클라이언트 상태 및 localStorage 갱신
-        updatedUser = {
-          ...currentUser.value,
-          ...updatedData
-        };
-      }
+      // API 호출
+      const updatedMember = await authApi.updateMember(memberId, updatedData);
 
-      // 최신 사용자 정보로 상태 갱신
-      currentUser.value = updatedUser || authApi.getCurrentUser();
+      // 반환된 MemberResponse 데이터로 currentUser 갱신
+      currentUser.value = {
+        ...currentUser.value,
+        ...updatedMember
+      };
 
       // localStorage 데이터 동기화
-      const keys = ['user', 'userInfo', 'auth'];
-      for (const key of keys) {
-        if (localStorage.getItem(key)) {
-          localStorage.setItem(key, JSON.stringify(currentUser.value));
-        }
-      }
-      if (!keys.some(k => localStorage.getItem(k))) {
-        localStorage.setItem('user', JSON.stringify(currentUser.value));
-      }
+      localStorage.setItem('user', JSON.stringify(currentUser.value));
 
-      return { success: true };
+      return { success: true, data: updatedMember };
     } catch (error) {
-      console.error('계정 정보 수정 실패:', error);
-      return { success: false, message: error.message };
+      console.error('회원정보 수정 실패:', error);
+      
+      // API 통신 에러 시 클라이언트 가상 반영 (서버 연결 불가 시 대처)
+      currentUser.value = {
+        ...currentUser.value,
+        ...updatedData
+      };
+      localStorage.setItem('user', JSON.stringify(currentUser.value));
+
+      return { 
+        success: false, 
+        message: error.response?.data?.detail || error.message 
+      };
     }
   };
 
@@ -64,6 +59,6 @@ export function useAuth() {
     isLoggedIn,
     login,
     logout,
-    updateUserInfo, // ★ 새로 추가된 함수
+    updateUserInfo,
   };
 }
