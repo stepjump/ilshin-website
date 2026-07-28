@@ -3,7 +3,7 @@
     <!-- 상단 네비게이션 바 -->
     <header class="navbar">
       <h1 class="logo">
-        <router-link to="/">일신 홈페이지9</router-link>
+        <router-link to="/">일신 홈페이지10</router-link>
       </h1>
       <nav class="nav-links">
         <router-link to="/about">회사소개</router-link>
