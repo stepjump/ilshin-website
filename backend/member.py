@@ -86,7 +86,7 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     email: str
     name: str
-    hone: Optional[str] = None  # ★ phone 필드 추가
+    phone: Optional[str] = None  # phone 필드 포함
     role: str
 
 
@@ -135,7 +135,7 @@ def login_for_access_token(
     try:
         user = db.query(Member).filter(Member.email == form_data.username).first()
         
-        # 암호화 검증
+        # 암호화 검증 (verify_password 사용)
         if not user or not verify_password(form_data.password, user.password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -160,7 +160,7 @@ def login_for_access_token(
             "token_type": "bearer",
             "email": user.email,
             "name": user.name,
-            "phone": user.phone or "", # ★ DB의 phone 값을 함께 반환
+            "phone": user.phone or "",  # DB의 phone 값 반환
             "role": user.role or "user"
         }
     except HTTPException:
@@ -178,7 +178,6 @@ def get_all_members(db: Session = Depends(get_db)):
     return db.query(Member).all()
 
 
-# ★ 1. 단일 회원 조회 (email 기준)
 @router.get("/{email}", response_model=MemberResponse)
 def get_member_by_email(email: str, db: Session = Depends(get_db)):
     member = db.query(Member).filter(Member.email == email).first()
@@ -209,7 +208,6 @@ def create_member(member: MemberCreate, db: Session = Depends(get_db)):
     return db_member
 
 
-# ★ 2. 회원 정보 수정 (email 기준)
 @router.put("/{email}", response_model=MemberResponse)
 def update_member_by_email(email: str, member_data: MemberUpdate, db: Session = Depends(get_db)):
     db_member = db.query(Member).filter(Member.email == email).first()
@@ -219,7 +217,6 @@ def update_member_by_email(email: str, member_data: MemberUpdate, db: Session = 
             detail=f"이메일 '{email}'에 해당하는 회원을 찾을 수 없습니다."
         )
 
-    # 이메일을 다른 이메일로 변경하려고 할 때 중복 체크
     if member_data.email and member_data.email != db_member.email:
         email_check = db.query(Member).filter(Member.email == member_data.email).first()
         if email_check:
@@ -230,7 +227,6 @@ def update_member_by_email(email: str, member_data: MemberUpdate, db: Session = 
 
     update_data = member_data.model_dump(exclude_unset=True)
 
-    # 비밀번호 변경 시 Bcrypt 암호화
     if "password" in update_data and update_data["password"]:
         update_data["password"] = get_password_hash(update_data["password"])
 
@@ -242,7 +238,6 @@ def update_member_by_email(email: str, member_data: MemberUpdate, db: Session = 
     return db_member
 
 
-# ★ 3. 회원 삭제 (email 기준)
 @router.delete("/{email}", status_code=status.HTTP_200_OK)
 def delete_member_by_email(email: str, db: Session = Depends(get_db)):
     db_member = db.query(Member).filter(Member.email == email).first()

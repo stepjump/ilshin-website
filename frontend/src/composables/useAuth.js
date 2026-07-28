@@ -1,4 +1,3 @@
-// frontend/src/composables/useAuth.js
 import { ref, computed } from 'vue';
 import axios from 'axios';
 import { authApi } from '../api/auth';
@@ -11,7 +10,6 @@ export function useAuth() {
 
   const login = async (email, password) => {
     const data = await authApi.login(email, password);
-    // 로그인 시 반환된 전체 유저 정보를 currentUser에 반영
     currentUser.value = authApi.getCurrentUser();
     return data;
   };
@@ -38,7 +36,7 @@ export function useAuth() {
         updatedMember = response.data;
       }
 
-      // 수정 후 기존 토큰 정보 등은 유지하면서 수정한 프로필 데이터 갱신
+      // 기존 로그인 상태 유지하면서 변경된 프로필 반영
       currentUser.value = {
         ...currentUser.value,
         ...updatedMember
