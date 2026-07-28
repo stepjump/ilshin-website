@@ -1,7 +1,7 @@
 // =========================================================================
 [지금 작업한것 올리기]
 git add .
-git commit -m "앞대문 내용v10 12:49"
+git commit -m "git main 브랜치3 맞춤"
 git push origin main
 
 
@@ -10,6 +10,25 @@ git commit -m "feat: fetch and display active door_info (useyn=Y) on home view"
 git push origin main
 
 =========================================================================
+
+
+=========================================================================
+[GIT main 브랜치 아닐때]
+git branch
+
+git stash
+
+git checkout main
+
+git stash pop
+
+git add .
+git commit -m "git main 브랜치2 맞춤"
+git push origin main
+
+=========================================================================
+
+
 
 =========================================================================
 [GIT 잘못됐을때]
