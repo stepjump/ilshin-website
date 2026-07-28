@@ -1,11 +1,9 @@
 // frontend/src/api/auth.js
 import axios from 'axios';
 
-// Render에 배포된 백엔드 API URL
 const API_BASE_URL = 'https://ilshin-website.onrender.com/api';
 
 export const authApi = {
-  // 현재 로그인된 유저 가져오기
   getCurrentUser() {
     const keys = ['user', 'userInfo', 'auth'];
     for (const key of keys) {
@@ -14,14 +12,13 @@ export const authApi = {
         try {
           return JSON.parse(item);
         } catch {
-          return { username: item, name: item };
+          return { username: item, email: item };
         }
       }
     }
     return null;
   },
 
-  // 로그인 API
   async login(email, password) {
     const response = await axios.post(`${API_BASE_URL}/login`, { email, password });
     if (response.data) {
@@ -30,7 +27,6 @@ export const authApi = {
     return response.data;
   },
 
-  // 로그아웃
   logout() {
     localStorage.removeItem('user');
     localStorage.removeItem('userInfo');
@@ -38,19 +34,22 @@ export const authApi = {
     localStorage.removeItem('token');
   },
 
-  // ★ member.py의 @router.put("/{member_id}") 호출
-  async updateMember(memberId, updateData) {
-    // member_id가 없거나 'admin' 등 스트링인 경우 기본 ID 처리
-    const id = memberId || 1;
-    
-    // endpoint 경로 시도 (/api/members/{id} 또는 /api/users/{id})
+  // ★ member 테이블의 email 컬럼을 Key로 수정 API 호출
+  async updateMemberByEmail(email, updateData) {
+    if (!email) {
+      throw new Error('수정할 회원의 이메일 정보가 없습니다.');
+    }
+
+    const encodedEmail = encodeURIComponent(email);
+
     try {
-      const response = await axios.put(`${API_BASE_URL}/members/${id}`, updateData);
+      // /api/members/{email} 엔드포인트 호출
+      const response = await axios.put(`${API_BASE_URL}/members/${encodedEmail}`, updateData);
       return response.data;
     } catch (err) {
-      // /api/members/ 경로가 실패할 경우 /api/users/ 로 폴백 시도
-      console.warn('/api/members PUT 실패, /api/users 경로 시도:', err);
-      const response = await axios.put(`${API_BASE_URL}/users/${id}`, updateData);
+      console.warn('/api/members/{email} PUT 실패, /api/users/{email} 경로로 재시도합니다:', err);
+      // 폴백 경로 시도
+      const response = await axios.put(`${API_BASE_URL}/users/${encodedEmail}`, updateData);
       return response.data;
     }
   }

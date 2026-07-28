@@ -18,16 +18,20 @@ export function useAuth() {
     currentUser.value = null;
   };
 
-  // ★ member.py API 연동 계정 정보 수정
+  // ★ email 기준 회원정보 수정
   const updateUserInfo = async (updatedData) => {
     try {
-      // 로그인된 사용자 ID 추출 (id 또는 member_id)
-      const memberId = currentUser.value?.id || currentUser.value?.member_id || currentUser.value?.username || 1;
+      // 현재 로그인된 사용자의 email 추출
+      const targetEmail = currentUser.value?.email || updatedData.email;
 
-      // API 호출
-      const updatedMember = await authApi.updateMember(memberId, updatedData);
+      if (!targetEmail) {
+        throw new Error('사용자의 이메일 정보를 찾을 수 없습니다.');
+      }
 
-      // 반환된 MemberResponse 데이터로 currentUser 갱신
+      // API 호출 (email 기준)
+      const updatedMember = await authApi.updateMemberByEmail(targetEmail, updatedData);
+
+      // 최신 사용자 상태 갱신
       currentUser.value = {
         ...currentUser.value,
         ...updatedMember
@@ -38,9 +42,9 @@ export function useAuth() {
 
       return { success: true, data: updatedMember };
     } catch (error) {
-      console.error('회원정보 수정 실패:', error);
+      console.error('이메일 기준 회원정보 수정 실패:', error);
       
-      // API 통신 에러 시 클라이언트 가상 반영 (서버 연결 불가 시 대처)
+      // API 오류 발생 시 클라이언트 상태 가상 반영
       currentUser.value = {
         ...currentUser.value,
         ...updatedData
