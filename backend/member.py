@@ -134,7 +134,7 @@ def login_for_access_token(
     try:
         user = db.query(Member).filter(Member.email == form_data.username).first()
         
-        # 암호화 검증 (verify_password 사용)
+        # 암호화 검증
         if not user or not verify_password(form_data.password, user.password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -148,7 +148,6 @@ def login_for_access_token(
                 detail="비활성화된 계정입니다."
             )
 
-        # ★ JWT 페이로드에 sub, name, email을 함께 주입
         access_token = create_access_token(data={
             "sub": user.email,
             "name": user.name,
@@ -177,11 +176,15 @@ def get_all_members(db: Session = Depends(get_db)):
     return db.query(Member).all()
 
 
-@router.get("/{member_id}", response_model=MemberResponse)
-def get_member_by_id(member_id: int, db: Session = Depends(get_db)):
-    member = db.query(Member).filter(Member.id == member_id).first()
+# ★ 1. 단일 회원 조회 (email 기준)
+@router.get("/{email}", response_model=MemberResponse)
+def get_member_by_email(email: str, db: Session = Depends(get_db)):
+    member = db.query(Member).filter(Member.email == email).first()
     if not member:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail=f"이메일 '{email}'에 해당하는 회원을 찾을 수 없습니다."
+        )
     return member
 
 
@@ -191,11 +194,10 @@ def create_member(member: MemberCreate, db: Session = Depends(get_db)):
     if existing_member:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="Email already registered"
+            detail="이미 가입된 이메일입니다."
         )
 
     member_data = member.model_dump()
-    # 비밀번호 암호화 후 저장
     member_data["password"] = get_password_hash(member_data["password"])
 
     db_member = Member(**member_data)
@@ -205,22 +207,28 @@ def create_member(member: MemberCreate, db: Session = Depends(get_db)):
     return db_member
 
 
-@router.put("/{member_id}", response_model=MemberResponse)
-def update_member(member_id: int, member_data: MemberUpdate, db: Session = Depends(get_db)):
-    db_member = db.query(Member).filter(Member.id == member_id).first()
+# ★ 2. 회원 정보 수정 (email 기준)
+@router.put("/{email}", response_model=MemberResponse)
+def update_member_by_email(email: str, member_data: MemberUpdate, db: Session = Depends(get_db)):
+    db_member = db.query(Member).filter(Member.email == email).first()
     if not db_member:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail=f"이메일 '{email}'에 해당하는 회원을 찾을 수 없습니다."
+        )
 
+    # 이메일을 다른 이메일로 변경하려고 할 때 중복 체크
     if member_data.email and member_data.email != db_member.email:
         email_check = db.query(Member).filter(Member.email == member_data.email).first()
         if email_check:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, 
-                detail="Email already in use by another member"
+                detail="변경하려는 이메일이 이미 사용 중입니다."
             )
 
     update_data = member_data.model_dump(exclude_unset=True)
-    # 수정할 때 비밀번호를 전달받으면 다시 암호화
+
+    # 비밀번호 변경 시 Bcrypt 암호화
     if "password" in update_data and update_data["password"]:
         update_data["password"] = get_password_hash(update_data["password"])
 
@@ -232,12 +240,16 @@ def update_member(member_id: int, member_data: MemberUpdate, db: Session = Depen
     return db_member
 
 
-@router.delete("/{member_id}", status_code=status.HTTP_200_OK)
-def delete_member(member_id: int, db: Session = Depends(get_db)):
-    db_member = db.query(Member).filter(Member.id == member_id).first()
+# ★ 3. 회원 삭제 (email 기준)
+@router.delete("/{email}", status_code=status.HTTP_200_OK)
+def delete_member_by_email(email: str, db: Session = Depends(get_db)):
+    db_member = db.query(Member).filter(Member.email == email).first()
     if not db_member:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail=f"이메일 '{email}'에 해당하는 회원을 찾을 수 없습니다."
+        )
 
     db.delete(db_member)
     db.commit()
-    return {"message": f"Member ID {member_id} has been deleted successfully"}
+    return {"message": f"이메일 '{email}' 계정이 성공적으로 삭제되었습니다."}

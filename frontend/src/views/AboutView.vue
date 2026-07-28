@@ -96,7 +96,7 @@ import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
 import { useAuth } from '../composables/useAuth'; // ★ 앱의 인증 상태 임포트
 
-const API_URL = 'https://ilshin-website.onrender.com/api/company/1';
+const API_URL = 'https://ilshin-website.onrender.com/api/company/1';  // company_info 테이블의 id컬럼이 1인경우, 회사소개는 id컬럼이 1인 row만 쓰도록 고정. 
 
 const { currentUser, isLoggedIn } = useAuth();
 
