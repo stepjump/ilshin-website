@@ -19,8 +19,18 @@ export const authApi = {
     return null;
   },
 
+  // ★ FastAPI OAuth2PasswordRequestForm 형식(Form Data, username/password)으로 수정
   async login(email, password) {
-    const response = await axios.post(`${API_BASE_URL}/members/login`, { email, password });
+    const formData = new URLSearchParams();
+    formData.append('username', email); // OAuth2 폼은 email 대신 username 키 사용
+    formData.append('password', password);
+
+    const response = await axios.post(`${API_BASE_URL}/members/login`, formData, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+
     if (response.data) {
       localStorage.setItem('user', JSON.stringify(response.data));
     }
@@ -34,7 +44,6 @@ export const authApi = {
     localStorage.removeItem('token');
   },
 
-  // ★ member.py의 PUT /api/members/{email} 직접 호출
   async updateMemberByEmail(email, updateData) {
     if (!email) {
       throw new Error('이메일 정보가 없습니다.');
