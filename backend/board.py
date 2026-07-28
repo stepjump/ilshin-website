@@ -1,152 +1,222 @@
-import os
 from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import Column, Integer, String, Text, DateTime
-from sqlalchemy.orm import Session
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy.orm import Session, relationship
 from pydantic import BaseModel
 
 try:
     from .main import Base, get_db
-    from .member import get_current_user, Member
+    from .member import Member, SECRET_KEY, ALGORITHM, verify_password, get_password_hash
 except ImportError:
     from main import Base, get_db
-    from member import get_current_user, Member
+    from member import Member, SECRET_KEY, ALGORITHM, verify_password, get_password_hash
 
-# 1. DB 모델 정의
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/members/login", auto_error=False)
+
+
+# 1. DB 모델
 class Board(Base):
     __tablename__ = "board"
 
     id = Column(Integer, primary_key=True, index=True)
+    board_type = Column(String(50), nullable=False, default="free", index=True)
     title = Column(String(200), nullable=False)
     content = Column(Text, nullable=False)
-    author_email = Column(String(150), nullable=False)
-    author_name = Column(String(100), nullable=False)
+    password = Column(String(255), nullable=True)  # 비회원 글용 암호화 비밀번호
+
+    member_id = Column(Integer, ForeignKey("member.id", ondelete="SET NULL"), nullable=True)
+    author = Column(String(50), default="손님")
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    member = relationship("Member", backref="boards")
 
-# 2. Pydantic 스키마 정의
+
+# 2. Pydantic 스키마
 class BoardBase(BaseModel):
     title: str
     content: str
 
 
 class BoardCreate(BoardBase):
-    pass
+    password: Optional[str] = None
+
+
+class BoardUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    password: Optional[str] = None
+
+
+class BoardDeleteRequest(BaseModel):
+    password: Optional[str] = None
 
 
 class BoardResponse(BoardBase):
     id: int
-    author_email: str
-    author_name: str
+    board_type: str
+    author: str
+    member_id: Optional[int] = None
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 # 3. Router 인스턴스
 router = APIRouter(
     prefix="/api/board",
-    tags=["Board Management"]
+    tags=["Multi-Board Management"]
 )
 
 
-# 4. API 엔드포인트
-@router.get("", response_model=List[BoardResponse])
-def get_all_posts(db: Session = Depends(get_db)):
-    """전체 게시글 목록 조회"""
-    return db.query(Board).order_by(Board.created_at.desc()).all()
+def get_current_user_optional(
+    token: Optional[str] = Depends(oauth2_scheme_optional), 
+    db: Session = Depends(get_db)
+) -> Optional[Member]:
+    if not token:
+        return None
+    try:
+        import jwt
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email:
+            user = db.query(Member).filter(Member.email == email).first()
+            if user and getattr(user, "is_active", "Y") == "Y":
+                return user
+    except Exception:
+        return None
+    return None
 
 
-@router.get("/{post_id}", response_model=BoardResponse)
-def get_post(post_id: int, db: Session = Depends(get_db)):
-    """단일 게시글 상세 조회"""
-    post = db.query(Board).filter(Board.id == post_id).first()
-    if not post:
+# 4. CRUD API
+@router.get("/{board_type}", response_model=List[BoardResponse])
+def get_boards_by_type(board_type: str, db: Session = Depends(get_db)):
+    return db.query(Board).filter(Board.board_type == board_type).order_by(Board.id.desc()).all()
+
+
+@router.get("/{board_type}/{board_id}", response_model=BoardResponse)
+def get_board_by_id(board_type: str, board_id: int, db: Session = Depends(get_db)):
+    board = db.query(Board).filter(Board.board_type == board_type, Board.id == board_id).first()
+    if not board:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, 
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="게시글을 찾을 수 없습니다."
         )
-    return post
+    return board
 
 
-@router.post("", response_model=BoardResponse, status_code=status.HTTP_201_CREATED)
-def create_post(
-    post: BoardCreate, 
+@router.post("/{board_type}", response_model=BoardResponse, status_code=status.HTTP_201_CREATED)
+def create_board(
+    board_type: str, 
+    board: BoardCreate, 
     db: Session = Depends(get_db),
-    current_user: Optional[Member] = Depends(get_current_user)
+    current_user: Optional[Member] = Depends(get_current_user_optional)
 ):
-    """게시글 작성 (로그인 필수)"""
-    if not current_user:
+    board_data = board.model_dump()
+
+    # 회원인 경우
+    if current_user:
+        board_data["member_id"] = current_user.id
+        board_data["author"] = getattr(current_user, "name", None) or getattr(current_user, "email", "회원")
+        board_data["password"] = None
+
+    # 비회원인 경우
+    else:
+        if not board.password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="비회원 게시글 작성 시 비밀번호 입력은 필수입니다."
+            )
+        board_data["member_id"] = None
+        board_data["author"] = "손님"
+        # 비회원 글 비밀번호 암호화
+        board_data["password"] = get_password_hash(board_data["password"])
+
+    try:
+        db_board = Board(
+            board_type=board_type,
+            **board_data
+        )
+        db.add(db_board)
+        db.commit()
+        db.refresh(db_board)
+        return db_board
+    except Exception as e:
+        db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="로그인이 필요합니다."
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"게시글 저장 중 오류 발생: {str(e)}"
         )
 
-    db_post = Board(
-        title=post.title,
-        content=post.content,
-        author_email=current_user.email,
-        author_name=current_user.name
+
+@router.put("/{board_type}/{board_id}", response_model=BoardResponse)
+def update_board(
+    board_type: str, 
+    board_id: int, 
+    board_data: BoardUpdate, 
+    db: Session = Depends(get_db),
+    current_user: Optional[Member] = Depends(get_current_user_optional)
+):
+    db_board = db.query(Board).filter(Board.board_type == board_type, Board.id == board_id).first()
+    if not db_board:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="게시글을 찾을 수 없습니다."
+        )
+
+    is_author = current_user and current_user.id == db_board.member_id
+    # 비밀번호 검증 버그 수정 (verify_password 적용)
+    is_password_correct = (
+        board_data.password is not None 
+        and db_board.password is not None 
+        and verify_password(board_data.password, db_board.password)
     )
-    db.add(db_post)
-    db.commit()
-    db.refresh(db_post)
-    return db_post
 
-
-# ★ 5. 개별 게시글 삭제 (작성자 본인 OR admin 권한)
-@router.delete("/{post_id}", status_code=status.HTTP_200_OK)
-def delete_post(
-    post_id: int, 
-    db: Session = Depends(get_db),
-    current_user: Optional[Member] = Depends(get_current_user)
-):
-    if not current_user:
+    if not (is_author or is_password_correct):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="로그인이 필요합니다."
+            detail="수정 권한이 없습니다. 비밀번호를 확인해 주세요."
         )
 
-    post = db.query(Board).filter(Board.id == post_id).first()
-    if not post:
+    update_dict = board_data.model_dump(exclude_unset=True, exclude={"password"})
+    for key, value in update_dict.items():
+        setattr(db_board, key, value)
+
+    db.commit()
+    db.refresh(db_board)
+    return db_board
+
+
+@router.post("/{board_type}/{board_id}/delete", status_code=status.HTTP_200_OK)
+def delete_board(
+    board_type: str, 
+    board_id: int, 
+    delete_req: BoardDeleteRequest, 
+    db: Session = Depends(get_db),
+    current_user: Optional[Member] = Depends(get_current_user_optional)
+):
+    db_board = db.query(Board).filter(Board.board_type == board_type, Board.id == board_id).first()
+    if not db_board:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, 
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="게시글을 찾을 수 없습니다."
         )
 
-    # ★ 조건 체크: 작성자 본인이 아니고, admin 권한도 아닌 경우 삭제 거부
-    is_author = (post.author_email == current_user.email)
-    is_admin = (current_user.role == "admin")
+    is_author = current_user and current_user.id == db_board.member_id
+    # 삭제 시 비밀번호 검증 버그 수정
+    is_password_correct = (
+        delete_req.password is not None 
+        and db_board.password is not None 
+        and verify_password(delete_req.password, db_board.password)
+    )
 
-    if not is_author and not is_admin:
+    if not (is_author or is_password_correct):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="게시글을 삭제할 권한이 없습니다. (작성자 또는 admin 전용)"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="삭제 권한이 없습니다. 비밀번호를 확인해 주세요."
         )
 
-    db.delete(post)
+    db.delete(db_board)
     db.commit()
-    return {"message": "게시글이 성공적으로 삭제되었습니다."}
-
-
-# 6. [관리자 전용] 게시판 전체글 일괄 삭제
-@router.delete("/all", status_code=status.HTTP_200_OK)
-def delete_all_posts(
-    db: Session = Depends(get_db),
-    current_user: Optional[Member] = Depends(get_current_user)
-):
-    if not current_user or current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="관리자(admin) 등급만 전체 삭제 권한이 있습니다."
-        )
-
-    deleted_count = db.query(Board).delete()
-    db.commit()
-
-    return {
-        "message": f"총 {deleted_count}개의 모든 게시글이 삭제되었습니다.",
-        "deleted_count": deleted_count
-    }
+    return {"message": f"게시글(ID: {board_id})이 성공적으로 삭제되었습니다."}
