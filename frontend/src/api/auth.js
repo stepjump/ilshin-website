@@ -14,7 +14,6 @@ export const authApi = {
             return parsed;
           }
         } catch {
-          // JSON 파싱에 실패한 문자열일 경우 기본 객체 생성
           return { name: item, email: item };
         }
       }

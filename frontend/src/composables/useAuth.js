@@ -19,7 +19,7 @@ export function useAuth() {
     currentUser.value = null;
   };
 
-  // 백엔드에서 최신 회원 정보 가져오기
+  // 백엔드 단일 회원 상세조회 GET API (/api/members/{email})
   const fetchMemberDetail = async (email) => {
     try {
       if (!email) return null;
@@ -49,10 +49,11 @@ export function useAuth() {
         updatedMember = response.data;
       }
 
+      // 상태 및 로컬 스토리지에 이메일/이름/전화번호 필드를 명확하게 매핑
       currentUser.value = {
         ...currentUser.value,
         name: updatedMember.name,
-        phone: updatedMember.phone,
+        phone: updatedMember.phone || '',
         email: updatedMember.email
       };
       localStorage.setItem('user', JSON.stringify(currentUser.value));

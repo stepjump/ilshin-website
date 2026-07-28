@@ -103,25 +103,27 @@ const profileForm = ref({
   password: ''
 });
 
-// 모달 오픈 시 백엔드에서 최신 회원정보 불러오기
+// 모달 오픈 시 백엔드 DB에서 직접 최신 회원 데이터 로드
 const openProfileModal = async () => {
   const email = currentUser.value?.email;
   
   profileForm.value = {
     email: email || '',
-    name: currentUser.value?.name || '',
+    name: '',
     phone: '',
     password: ''
   };
 
   showProfileModal.value = true;
 
-  // DB에서 최신 정보 직접 조회
   if (email) {
+    // DB에서 이메일 기준으로 회원 정보를 직접 조회해 폼을 깔끔하게 채움
     const detail = await fetchMemberDetail(email);
     if (detail) {
       profileForm.value.name = detail.name || '';
       profileForm.value.phone = detail.phone || '';
+    } else {
+      profileForm.value.name = currentUser.value?.name || '';
     }
   }
 };
