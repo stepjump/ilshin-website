@@ -1,35 +1,48 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import HomeView from '../views/HomeView.vue';
-import LoginView from '../views/LoginView.vue';
+import AboutView from '../views/AboutView.vue';
 import BoardView from '../views/BoardView.vue';
-import AboutView from '../views/AboutView.vue'; // ★ 회사소개 뷰 임포트
+import BoardWriteView from '../views/BoardWriteView.vue';
+import BoardDetailView from '../views/BoardDetailView.vue'; // ★ 상세화면 컴포넌트 임포트
+import LoginView from '../views/LoginView.vue';
 
 const routes = [
   {
     path: '/',
-    name: 'Home',
-    component: HomeView
+    name: 'home',
+    component: HomeView,
   },
   {
     path: '/about',
-    name: 'About',
-    component: AboutView // ★ 자유게시판 왼쪽 회사소개 페이지
+    name: 'about',
+    component: AboutView,
   },
   {
     path: '/board',
-    name: 'Board',
-    component: BoardView
+    name: 'board',
+    component: BoardView,
+  },
+  {
+    path: '/board/write',
+    name: 'board-write',
+    component: BoardWriteView,
+  },
+  {
+    // ★ 게시글 상세페이지 동적 경로 연결 (/board/1, /board/2 ...)
+    path: '/board/:id',
+    name: 'board-detail',
+    component: BoardDetailView,
   },
   {
     path: '/login',
-    name: 'Login',
-    component: LoginView
-  }
+    name: 'login',
+    component: LoginView,
+  },
 ];
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  routes
+  routes,
 });
 
 export default router;
