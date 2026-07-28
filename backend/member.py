@@ -86,6 +86,7 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     email: str
     name: str
+    hone: Optional[str] = None  # ★ phone 필드 추가
     role: str
 
 
@@ -159,6 +160,7 @@ def login_for_access_token(
             "token_type": "bearer",
             "email": user.email,
             "name": user.name,
+            "phone": user.phone or "", # ★ DB의 phone 값을 함께 반환
             "role": user.role or "user"
         }
     except HTTPException:

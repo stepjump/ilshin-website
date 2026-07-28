@@ -11,6 +11,7 @@ export function useAuth() {
 
   const login = async (email, password) => {
     const data = await authApi.login(email, password);
+    // 로그인 시 반환된 전체 유저 정보를 currentUser에 반영
     currentUser.value = authApi.getCurrentUser();
     return data;
   };
@@ -20,7 +21,6 @@ export function useAuth() {
     currentUser.value = null;
   };
 
-  // ★ 회원정보 변경 기능
   const updateUserInfo = async (updatedData) => {
     try {
       const email = currentUser.value?.email || updatedData.email;
@@ -30,17 +30,15 @@ export function useAuth() {
 
       let updatedMember = null;
 
-      // 1. authApi 객체의 updateMemberByEmail 호출 시도
       if (authApi && typeof authApi.updateMemberByEmail === 'function') {
         updatedMember = await authApi.updateMemberByEmail(email, updatedData);
       } else {
-        // 2. 메서드가 없을 경우 직접 axios로 /api/members/{email} PUT 호출
         const encodedEmail = encodeURIComponent(email);
         const response = await axios.put(`${API_BASE_URL}/members/${encodedEmail}`, updatedData);
         updatedMember = response.data;
       }
 
-      // 상태 및 LocalStorage 업데이트
+      // 수정 후 기존 토큰 정보 등은 유지하면서 수정한 프로필 데이터 갱신
       currentUser.value = {
         ...currentUser.value,
         ...updatedMember
