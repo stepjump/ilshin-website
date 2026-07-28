@@ -19,6 +19,19 @@ export function useAuth() {
     currentUser.value = null;
   };
 
+  // 백엔드에서 최신 회원 정보 가져오기
+  const fetchMemberDetail = async (email) => {
+    try {
+      if (!email) return null;
+      const encodedEmail = encodeURIComponent(email);
+      const response = await axios.get(`${API_BASE_URL}/members/${encodedEmail}`);
+      return response.data;
+    } catch (error) {
+      console.error('회원 상세 정보 조회 실패:', error);
+      return null;
+    }
+  };
+
   const updateUserInfo = async (updatedData) => {
     try {
       const email = currentUser.value?.email || updatedData.email;
@@ -36,10 +49,11 @@ export function useAuth() {
         updatedMember = response.data;
       }
 
-      // 기존 로그인 상태 유지하면서 변경된 프로필 반영
       currentUser.value = {
         ...currentUser.value,
-        ...updatedMember
+        name: updatedMember.name,
+        phone: updatedMember.phone,
+        email: updatedMember.email
       };
       localStorage.setItem('user', JSON.stringify(currentUser.value));
 
@@ -58,6 +72,7 @@ export function useAuth() {
     isLoggedIn,
     login,
     logout,
+    fetchMemberDetail,
     updateUserInfo,
   };
 }

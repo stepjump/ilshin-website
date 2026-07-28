@@ -1,4 +1,3 @@
-// frontend/src/api/auth.js
 import axios from 'axios';
 
 const API_BASE_URL = 'https://ilshin-website.onrender.com/api';
@@ -10,19 +9,22 @@ export const authApi = {
       const item = localStorage.getItem(key);
       if (item) {
         try {
-          return JSON.parse(item);
+          const parsed = JSON.parse(item);
+          if (parsed && typeof parsed === 'object') {
+            return parsed;
+          }
         } catch {
-          return { username: item, email: item };
+          // JSON 파싱에 실패한 문자열일 경우 기본 객체 생성
+          return { name: item, email: item };
         }
       }
     }
     return null;
   },
 
-  // ★ FastAPI OAuth2PasswordRequestForm 형식(Form Data, username/password)으로 수정
   async login(email, password) {
     const formData = new URLSearchParams();
-    formData.append('username', email); // OAuth2 폼은 email 대신 username 키 사용
+    formData.append('username', email);
     formData.append('password', password);
 
     const response = await axios.post(`${API_BASE_URL}/members/login`, formData, {

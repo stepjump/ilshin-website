@@ -1,4 +1,3 @@
-<!-- frontend/src/App.vue -->
 <template>
   <div id="app">
     <!-- 상단 네비게이션 바 -->
@@ -12,7 +11,6 @@
         
         <!-- 로그인 상태 표시 -->
         <span v-if="isLoggedIn" class="user-area">
-          <!-- 계정명 클릭 시 계정정보 변경 모달 오픈 -->
           <span 
             class="user-name clickable" 
             @click="openProfileModal" 
@@ -41,7 +39,7 @@
             <label>이메일 (계정 Key / 변경 불가)</label>
             <input 
               type="text" 
-              :value="currentUser?.email || ''" 
+              :value="profileForm.email" 
               disabled 
               class="disabled-input"
             />
@@ -93,25 +91,39 @@ import { useRouter } from 'vue-router';
 import { useAuth } from './composables/useAuth';
 
 const router = useRouter();
-const { currentUser, isLoggedIn, logout, updateUserInfo } = useAuth();
+const { currentUser, isLoggedIn, logout, updateUserInfo, fetchMemberDetail } = useAuth();
 
 const showProfileModal = ref(false);
 const saving = ref(false);
 
 const profileForm = ref({
+  email: '',
   name: '',
   phone: '',
   password: ''
 });
 
-// 모달 오픈 시 현재 정보 로드
-const openProfileModal = () => {
+// 모달 오픈 시 백엔드에서 최신 회원정보 불러오기
+const openProfileModal = async () => {
+  const email = currentUser.value?.email;
+  
   profileForm.value = {
+    email: email || '',
     name: currentUser.value?.name || '',
-    phone: currentUser.value?.phone || '',
+    phone: '',
     password: ''
   };
+
   showProfileModal.value = true;
+
+  // DB에서 최신 정보 직접 조회
+  if (email) {
+    const detail = await fetchMemberDetail(email);
+    if (detail) {
+      profileForm.value.name = detail.name || '';
+      profileForm.value.phone = detail.phone || '';
+    }
+  }
 };
 
 const closeProfileModal = () => {
@@ -124,7 +136,6 @@ const handleLogout = () => {
   router.push('/login');
 };
 
-// 계정 정보 저장 처리
 const handleSaveProfile = async () => {
   try {
     saving.value = true;
@@ -195,7 +206,6 @@ const handleSaveProfile = async () => {
   gap: 12px;
 }
 
-/* 클릭 가능한 계정명 버튼 스타일 */
 .user-name.clickable {
   font-size: 0.95rem;
   color: #e2e8f0;
@@ -224,7 +234,6 @@ const handleSaveProfile = async () => {
   min-height: 80vh;
 }
 
-/* 모달 레이아웃 */
 .modal-overlay {
   position: fixed;
   top: 0;
