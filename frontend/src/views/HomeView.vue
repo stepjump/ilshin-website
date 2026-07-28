@@ -1,7 +1,7 @@
 <!-- frontend/src/views/HomeView.vue -->
 <template>
   <div class="home-container">
-    <h2>앞대문 내용 v1</h2>
+    <h2>앞대문 내용 v3</h2>
 
     <!-- 로딩 중 표시 -->
     <div v-if="loading" class="loading">
